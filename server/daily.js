@@ -25,12 +25,19 @@ const DEFAULT_CONFIG = {
 
 const EMPTY_DAY = { weekly: 0, fiveHour: 0, cost: 0, firstAt: null, lastAt: null, alerted: 0 };
 
+// Cap on how far the between-ticks estimate may run ahead. It is waiting for a
+// 1-point tick, so it must never claim a whole point on its own.
+const MAX_FRAC = 0.9;
+const RATE_SMOOTHING = 0.3;
+
+const EMPTY_EST = { frac: 0, costSinceTick: 0, rate: null };
+
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 let db = {
   config: { ...DEFAULT_CONFIG },
   // Last sample of each account-wide window, used to compute increments.
-  state: { fiveHour: null, sevenDay: null, costBySession: {} },
+  state: { fiveHour: null, sevenDay: null, costBySession: {}, weeklyEst: { ...EMPTY_EST } },
   days: {}, // "YYYY-MM-DD" -> { weekly, fiveHour, cost, firstAt, lastAt, alerted }
 };
 
@@ -39,7 +46,13 @@ function load() {
     const parsed = JSON.parse(fs.readFileSync(FILE, "utf8"));
     db = {
       config: { ...DEFAULT_CONFIG, ...(parsed.config || {}) },
-      state: { fiveHour: null, sevenDay: null, costBySession: {}, ...(parsed.state || {}) },
+      state: {
+        fiveHour: null,
+        sevenDay: null,
+        costBySession: {},
+        ...(parsed.state || {}),
+        weeklyEst: { ...EMPTY_EST, ...(parsed.state?.weeklyEst || {}) },
+      },
       days: parsed.days || {},
     };
   } catch {
@@ -113,6 +126,44 @@ function costDelta(sessionId, total) {
   return Math.max(0, total - prev);
 }
 
+// `used_percentage` arrives as a whole number, and the weekly window — the one the
+// daily budget is measured against — only ticks once per ~1% of an entire week's
+// allowance. Accumulating those ticks alone leaves the budget reading 0% for hours
+// and then jumping. Cost moves with every message, so we learn how many weekly
+// percent a dollar buys and use that to fill the gap between ticks. Every real tick
+// reconciles against the estimate, so error never accumulates across ticks.
+function weeklyDelta(next, spend) {
+  const est = db.state.weeklyEst;
+  const hadBaseline = Boolean(db.state.sevenDay);
+  const stepped = windowDelta("sevenDay", next); // also refreshes db.state.sevenDay
+
+  if (!next) return 0;
+  if (!hadBaseline) {
+    // First sample: no idea how much of the window is ours, so start the clock here.
+    est.frac = 0;
+    est.costSinceTick = 0;
+    return 0;
+  }
+
+  if (stepped > 0) {
+    const spent = est.costSinceTick + spend;
+    if (spent > 0) {
+      const observed = stepped / spent;
+      est.rate = +(est.rate ? est.rate * (1 - RATE_SMOOTHING) + observed * RATE_SMOOTHING : observed).toFixed(6);
+    }
+    const credit = stepped - est.frac; // the estimate already banked `frac`
+    est.frac = 0;
+    est.costSinceTick = 0;
+    return credit;
+  }
+
+  est.costSinceTick = +(est.costSinceTick + spend).toFixed(4);
+  if (!est.rate || spend <= 0) return 0;
+  const guess = Math.min(est.rate * spend, Math.max(0, MAX_FRAC - est.frac));
+  est.frac = +(est.frac + guess).toFixed(4);
+  return guess;
+}
+
 /**
  * Fold one usage sample into today's bucket.
  * @returns {{ key: string, day: object, crossed: number|null }} crossed = budget
@@ -122,9 +173,11 @@ function record({ fiveHour, sevenDay, cost, sessionId, at = Date.now() }) {
   const key = dayKey(at);
   const day = getDay(key, at);
 
-  day.weekly = +(day.weekly + windowDelta("sevenDay", sevenDay)).toFixed(2);
+  const spend = costDelta(sessionId, cost);
+  day.cost = +(day.cost + spend).toFixed(4);
   day.fiveHour = +(day.fiveHour + windowDelta("fiveHour", fiveHour)).toFixed(2);
-  day.cost = +(day.cost + costDelta(sessionId, cost)).toFixed(4);
+  // A tick can reconcile the estimate downwards, so clamp instead of going negative.
+  day.weekly = +Math.max(0, day.weekly + weeklyDelta(sevenDay, spend)).toFixed(2);
   day.lastAt = at;
 
   const budget = db.config.budgetPercent;
@@ -185,6 +238,9 @@ function summary(now = Date.now()) {
       remaining: +(budget - day.weekly).toFixed(2),
       ratio: budget > 0 ? +((day.weekly / budget) * 100).toFixed(1) : null,
       resetsAt: end,
+      // Until the weekly window ticks once we have no cost→percent rate, so a 0
+      // here means "not measured yet", not "nothing used".
+      calibrating: !db.state.weeklyEst.rate && day.weekly === 0,
     },
     limits: { fiveHour, sevenDay },
     pace,
