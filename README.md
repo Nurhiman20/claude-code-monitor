@@ -31,7 +31,7 @@ Cara dapat token & chat id ada di komentar dalam `.env.example`.
 npm start
 ```
 
-Buka dashboard di **http://localhost:4756**. Biarkan proses ini jalan di background (pakai `pm2`, `tmux`, atau `nohup` kalau mau permanen).
+Buka dashboard di **http://localhost:4756**. Biarkan proses ini jalan di background. Biar hidup sendiri tiap PC nyala, lihat [Menjalankan otomatis saat startup](#menjalankan-otomatis-saat-startup).
 
 ## 3. Sambungkan Claude Code lewat Hooks
 
@@ -174,10 +174,55 @@ claude-monitor/
 │   ├── ask.js            ← hook blocking: minta izin / teruskan pertanyaan ke Telegram
 │   ├── statusline.js     ← hook statusLine: kirim usage + render status bar
 │   └── statusline-wrapper.js ← sama, tapi tetap pakai status bar dari plugin lain
+├── scripts/              ← autostart Windows (lihat bagian terakhir)
+│   ├── run-server.cmd    ← watchdog: jalankan server, restart kalau crash
+│   ├── start-hidden.vbs  ← jalankan watchdog tanpa window
+│   └── stop-server.ps1   ← matikan watchdog + server
 └── claude-settings-snippet.json
 ```
 
-## Menjalankan otomatis saat startup (opsional)
+## Menjalankan otomatis saat startup
+
+### Windows — Task Scheduler (disarankan)
+
+Server hidup sendiri tiap kamu login, tanpa jendela console, dan restart sendiri kalau crash. Dua file di `scripts/` yang mengurus itu:
+
+- `run-server.cmd` — loop: jalankan `node index.js`, tulis log ke `server/server.log`, tunggu 5 detik, ulangi kalau prosesnya mati.
+- `start-hidden.vbs` — pembungkus supaya `cmd.exe`-nya jalan tanpa window.
+
+Daftarkan sekali (PowerShell, tanpa admin — ganti path sesuai lokasi repo kamu):
+
+```powershell
+$a = New-ScheduledTaskAction -Execute "wscript.exe" `
+     -Argument '"C:\path\ke\claude-monitor\scripts\start-hidden.vbs"'
+$t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+     -ExecutionTimeLimit 0 -StartWhenAvailable
+Register-ScheduledTask -TaskName "ClaudeMonitor" -Action $a -Trigger $t -Settings $s -Force
+```
+
+**Kenapa trigger logon, bukan Windows Service:** `node-notifier` butuh sesi desktop interaktif. Service jalan di session 0 → notifikasi desktop tidak muncul.
+
+Perintah harian:
+
+```powershell
+Start-ScheduledTask   -TaskName ClaudeMonitor            # nyalakan sekarang
+Disable-ScheduledTask -TaskName ClaudeMonitor            # matikan autostart
+Enable-ScheduledTask  -TaskName ClaudeMonitor            # nyalakan autostart lagi
+Unregister-ScheduledTask -TaskName ClaudeMonitor -Confirm:$false   # hapus task
+
+# stop server yang lagi jalan
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop-server.ps1
+```
+
+⚠️ **`Stop-ScheduledTask` tidak mematikan server.** `start-hidden.vbs` melepas prosesnya lalu langsung keluar, jadi task balik ke status `Ready` sementara loop `cmd.exe`-nya tetap jalan sebagai proses yatim. Begitu juga kalau kamu kill `node.exe` dari Task Manager — watchdog menghidupkannya lagi 5 detik kemudian. Pakai `scripts/stop-server.ps1`: dia membunuh loop `cmd.exe` dulu, baru pemilik port 4756.
+
+Catatan:
+- Ubah `server/.env` → restart task, tidak dibaca ulang sendiri.
+- `server/server.log` tumbuh terus, tidak ada rotasi. Pangkas sesekali.
+- Mau debug di terminal? Stop dulu lewat `stop-server.ps1`, kalau tidak `npm start` gagal karena port sudah dipakai.
+
+### macOS / Linux — pm2
 
 ```bash
 npm install -g pm2
