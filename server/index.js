@@ -6,6 +6,8 @@ const { WebSocketServer } = require("ws");
 const store = require("./store");
 const daily = require("./daily");
 const { notifyBoth, desktopNotify, telegramNotify } = require("./notifiers");
+const approvals = require("./approvals");
+const bot = require("./bot");
 
 const PORT = process.env.CCM_PORT || 4756;
 const THRESHOLDS = [50, 75, 90]; // percent usage checkpoints to alert on
@@ -152,6 +154,51 @@ function notifyDailyBudget(crossed, summary) {
   notifyBoth(title, body);
 }
 
+// --- Remote approval ------------------------------------------------------
+// hooks/ask.js blocks on this response, so the request deliberately stays open
+// until someone answers from Telegram or the dashboard (or pending.js times it
+// out). A null result means "stay out of the way" — the hook then prints
+// nothing and Claude Code falls back to its normal local prompt.
+app.post("/api/ask", async (req, res) => {
+  req.setTimeout(0);
+  res.setTimeout(0);
+
+  const { mode = "permission", payload = {}, timeoutMs } = req.body || {};
+
+  // If Claude Code kills the hook (Ctrl-C, session exit) the socket closes and
+  // the request must be retired, otherwise it lingers in Telegram until timeout.
+  // Watch the *response*: `req` emits "close" as soon as its body is consumed,
+  // which is immediately. `res` closes either because we answered
+  // (writableFinished) or because the hook died — only the latter is a give-up.
+  let askId = null;
+  res.on("close", () => {
+    if (askId && !res.writableFinished) approvals.resolve(askId, { decision: "abandoned" });
+  });
+
+  let result;
+  try {
+    result = await approvals.ask({ mode, payload, timeoutMs, onCreated: (id) => (askId = id) });
+  } catch (e) {
+    console.error("[ask failed]", e.message);
+    result = null;
+  }
+  if (res.writableEnded) return; // hook gave up first
+  res.json(result || { decision: "skip" });
+});
+
+app.get("/api/ask/pending", (req, res) => res.json(approvals.list()));
+
+app.post("/api/ask/:id/resolve", (req, res) => {
+  const { decision, answer } = req.body || {};
+  if (!["allow", "deny", "answer", "stop"].includes(decision)) {
+    return res.status(400).json({ ok: false, error: "decision harus allow, deny, answer, atau stop" });
+  }
+  const ok = approvals.resolve(req.params.id, { decision, answer, by: "dashboard" });
+  res.status(ok ? 200 : 404).json({ ok });
+});
+
+approvals.subscribe((kind, ask) => broadcast({ kind, ask }));
+
 // --- Read endpoints for the dashboard on load ------------------------------
 app.get("/api/events", (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 200, 500);
@@ -178,4 +225,5 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 server.listen(PORT, () => {
   console.log(`Claude Code Monitor listening on http://localhost:${PORT}`);
+  bot.start();
 });

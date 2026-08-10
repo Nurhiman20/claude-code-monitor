@@ -12,7 +12,8 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js Stop" }
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js Stop" },
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/ask.js question", "timeout": 570 }
         ]
       }
     ],
@@ -29,6 +30,12 @@
         "matcher": "*",
         "hooks": [
           { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js PreToolUse" }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/ask.js permission", "timeout": 270 }
         ]
       }
     ],

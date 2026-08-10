@@ -115,6 +115,44 @@
   .pill.warn { color: var(--amber); }
   .pill.crit { color: var(--red); }
 
+  /* --- remote approval --- */
+  #askList { display: grid; gap: 12px; }
+  .ask-card {
+    border-color: var(--amber);
+    background: var(--panel-2);
+    display: grid;
+    gap: 12px;
+  }
+  .ask-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 14px;
+  }
+  .ask-head .proj { color: var(--text-dim); font-weight: 400; font-size: 12px; }
+  .ask-timer { margin-left: auto; font-size: 11px; color: var(--text-dim); }
+  .ask-detail {
+    margin: 0; padding: 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    font-family: inherit; font-size: 12.5px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto;
+  }
+  .ask-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    font-family: inherit; font-size: 13px; padding: 9px 16px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--text-dim); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.allow { border-color: var(--green); color: var(--green); }
+  .btn.deny { border-color: var(--red); color: var(--red); }
+  .ask-input {
+    flex: 1; min-width: 200px;
+    font-family: inherit; font-size: 13px; padding: 9px 12px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text);
+  }
+
   .bar-track {
     position: relative;
     height: 12px;
@@ -353,6 +391,11 @@
   </header>
 
   <main>
+    <section id="askSection" aria-labelledby="askHeading" hidden>
+      <p class="eyebrow" id="askHeading">Butuh jawaban kamu</p>
+      <div id="askList"></div>
+    </section>
+
     <section aria-labelledby="budgetHeading">
       <p class="eyebrow" id="budgetHeading">Budget harian</p>
       <div class="budget-grid">
@@ -404,7 +447,11 @@
   const pulseDot = document.getElementById('pulseDot');
   const toastsEl = document.getElementById('toasts');
 
+  const askSectionEl = document.getElementById('askSection');
+  const askListEl = document.getElementById('askList');
+
   const usageBySession = new Map();
+  const asks = new Map(); // id -> pending approval/question waiting on us
   const MAX_FEED_ITEMS = 200;
   const FEED_INITIAL = 5;
   const FEED_PAGE = 10;
@@ -462,7 +509,7 @@
     budgetCardEl.innerHTML = `
       <div class="budget-head">
         <span class="budget-value">${num(t.weekly)}%</span>
-        <span class="budget-of">dari jatah ${num(t.budget)}% limit mingguan</span>
+        <span class="budget-of">${t.calibrating ? 'mengukur — limit mingguan belum bergerak' : `dari jatah ${num(t.budget)}% limit mingguan`}</span>
         <span class="pill ${pill[0]}">${pill[1]}</span>
       </div>
       <div class="bar-track" role="progressbar" aria-label="Pemakaian budget harian"
@@ -647,14 +694,99 @@
     renderFeed();
   });
 
+  // --- remote approval -----------------------------------------------------
+  // Claude Code is blocked on a hook while any of these cards are up, so they
+  // sit at the top of the page and only leave once answered here, from
+  // Telegram, or by hitting the deadline.
+  function askRow(a) {
+    const isQ = a.mode === 'question';
+    const title = isQ ? '💬 Claude nanya' : '🔐 Minta izin: ' + esc(a.tool || 'tool');
+    const actions = isQ
+      ? `<input class="ask-input" type="text" aria-label="Jawaban buat Claude" placeholder="Ketik jawaban…" />
+         <button type="button" class="btn allow" data-act="answer">Kirim</button>
+         <button type="button" class="btn" data-act="stop">Biarkan berhenti</button>`
+      : `<button type="button" class="btn allow" data-act="allow">✅ Izinkan</button>
+         <button type="button" class="btn deny" data-act="deny">❌ Tolak</button>`;
+    return `<div class="card ask-card" data-id="${esc(a.id)}">
+      <div class="ask-head">${title}
+        <span class="proj">${esc(a.project)}</span>
+        <span class="ask-timer" data-expires="${a.expiresAt}">${askLeft(a.expiresAt)}</span>
+      </div>
+      <pre class="ask-detail">${esc(a.detail || '(tanpa detail)')}</pre>
+      <div class="ask-actions">${actions}</div>
+    </div>`;
+  }
+
+  function askLeft(expiresAt) {
+    const s = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+    return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s lagi` : `${s}s lagi`;
+  }
+
+  function renderAsks() {
+    const list = Array.from(asks.values()).sort((a, b) => a.createdAt - b.createdAt);
+    askSectionEl.hidden = list.length === 0;
+    askListEl.innerHTML = list.map(askRow).join('');
+  }
+
+  async function resolveAsk(card, decision, answer) {
+    const id = card.dataset.id;
+    card.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    try {
+      const res = await fetch(`/api/ask/${id}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, answer }),
+      });
+      if (!res.ok) throw new Error('gagal');
+      asks.delete(id); // the ask-resolved broadcast does this too — whichever lands first
+      renderAsks();
+    } catch (e) {
+      toast('Gagal mengirim jawaban — mungkin sudah kedaluwarsa.', 'error');
+      card.querySelectorAll('button').forEach((b) => (b.disabled = false));
+    }
+  }
+
+  askListEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const card = btn.closest('.ask-card');
+    const act = btn.dataset.act;
+    if (act === 'answer') {
+      const input = card.querySelector('.ask-input');
+      const text = input.value.trim();
+      if (!text) return input.focus();
+      resolveAsk(card, 'answer', text);
+    } else if (act === 'stop') {
+      resolveAsk(card, 'stop');
+    } else {
+      resolveAsk(card, act);
+    }
+  });
+
+  askListEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.classList.contains('ask-input')) return;
+    e.target.closest('.ask-card').querySelector('button[data-act="answer"]').click();
+  });
+
+  // Tick only the countdown text — a full re-render would steal focus from a
+  // half-typed answer.
+  setInterval(() => {
+    askListEl.querySelectorAll('.ask-timer').forEach((el) => {
+      el.textContent = askLeft(Number(el.dataset.expires));
+    });
+  }, 1000);
+
   // --- boot ----------------------------------------------------------------
   async function loadInitial() {
     try {
-      const [events, usage, dailyData] = await Promise.all([
+      const [events, usage, dailyData, pendingAsks] = await Promise.all([
         fetch('/api/events?limit=100').then((r) => r.json()),
         fetch('/api/usage').then((r) => r.json()),
         fetch('/api/daily').then((r) => r.json()),
+        fetch('/api/ask/pending').then((r) => r.json()),
       ]);
+      pendingAsks.forEach((a) => asks.set(a.id, a));
+      renderAsks();
       daily = dailyData;
       renderDaily();
       renderWindows();
@@ -699,6 +831,13 @@
         if (!editingBudget) renderDaily();
         renderWindows();
         renderHistory();
+      } else if (data.kind === 'ask') {
+        asks.set(data.ask.id, data.ask);
+        renderAsks();
+        toast(data.ask.mode === 'question' ? 'Claude nanya sesuatu.' : `Claude minta izin ${data.ask.tool}.`);
+      } else if (data.kind === 'ask-resolved') {
+        asks.delete(data.ask.id);
+        renderAsks();
       }
     };
   }
