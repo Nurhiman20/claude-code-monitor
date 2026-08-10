@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Claude Code Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #10131a;
+    --panel: #171b25;
+    --panel-2: #1d2230;
+    --border: #262c3b;
+    --text: #e7eaf0;
+    --text-dim: #838ba0;
+    --amber: #f5a623;
+    --green: #3ecf8e;
+    --red: #ff5f56;
+    --blue: #5b8def;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 22px 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pulse {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 0 rgba(62,207,142,0.6);
+    animation: pulse 2.2s infinite;
+    flex: none;
+  }
+  .pulse.off { background: var(--red); animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(62,207,142,0.55); }
+    70% { box-shadow: 0 0 0 10px rgba(62,207,142,0); }
+    100% { box-shadow: 0 0 0 0 rgba(62,207,142,0); }
+  }
+  .conn-status { font-size: 12px; color: var(--text-dim); }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 28px 48px;
+    display: grid;
+    gap: 22px;
+  }
+  .eyebrow {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-dim);
+    margin: 0 0 10px 2px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+
+  /* --- daily budget hero --- */
+  .budget-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .budget-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .budget-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .budget-of { color: var(--text-dim); font-size: 14px; }
+  .pill {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .pill.ok { color: var(--green); }
+  .pill.warn { color: var(--amber); }
+  .pill.crit { color: var(--red); }
+
+  .bar-track {
+    position: relative;
+    height: 12px;
+    border-radius: 8px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 8px;
+    background: var(--green);
+    transition: width .45s ease;
+  }
+  .bar-fill.warn { background: var(--amber); }
+  .bar-fill.crit { background: var(--red); }
+  .bar-marker {
+    position: absolute;
+    top: -3px; bottom: -3px;
+    width: 2px;
+    background: var(--blue);
+    opacity: .85;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .meta-row b { color: var(--text); font-weight: 500; }
+  .hint {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--panel-2);
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+  .hint b { color: var(--blue); font-weight: 600; }
+
+  .budget-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+  }
+  .budget-form input {
+    width: 74px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 9px;
+  }
+  .budget-form input:focus-visible,
+  .budget-form select:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 1px;
+  }
+  .budget-form select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 7px 9px;
+  }
+  .saved-flag { color: var(--green); opacity: 0; transition: opacity .3s; }
+  .saved-flag.show { opacity: 1; }
+
+  /* --- window mini cards --- */
+  .window-cards { display: grid; gap: 14px; }
+  .win-card .win-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .win-card .win-pct {
+    font-size: 20px; font-weight: 600; color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .win-card .bar-track { height: 8px; }
+  .win-card .win-foot { margin-top: 8px; font-size: 11.5px; color: var(--text-dim); }
+
+  /* --- history --- */
+  .history {
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    gap: 6px;
+    align-items: end;
+    height: 92px;
+    position: relative;
+    padding-top: 4px;
+  }
+  .hist-col { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 5px; }
+  .hist-bar {
+    border-radius: 4px 4px 2px 2px;
+    background: var(--panel-2);
+    min-height: 2px;
+    transition: height .4s ease;
+  }
+  .hist-bar.ok { background: #2e7d5b; }
+  .hist-bar.warn { background: var(--amber); }
+  .hist-bar.crit { background: var(--red); }
+  .hist-bar.today { outline: 1px solid var(--text-dim); }
+  .hist-label { font-size: 9.5px; color: var(--text-dim); text-align: center; }
+  .budget-line {
+    position: absolute; left: 0; right: 0;
+    border-top: 1px dashed var(--blue);
+    opacity: .5;
+  }
+  .legend { font-size: 11px; color: var(--text-dim); margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+  /* --- sessions + feed --- */
+  #sessionRow {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .sess-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
+  .sess-card .proj { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; }
+  .sess-card .sess-meta { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
+
+  .empty { color: var(--text-dim); font-size: 13px; padding: 14px 2px; line-height: 1.6; }
+  .skeleton {
+    background: linear-gradient(90deg, var(--panel-2) 25%, #232a3a 50%, var(--panel-2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s infinite;
+    border-radius: 6px;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton, .pulse { animation: none; }
+    .bar-fill, .hist-bar { transition: none; }
+  }
+
+  #feed {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .feed-item {
+    display: grid;
+    grid-template-columns: 4px 90px 1fr auto;
+    gap: 14px;
+    align-items: start;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px;
+  }
+  .feed-item:last-child { border-bottom: none; }
+  .bar { align-self: stretch; border-radius: 3px; }
+  .bar.Notification { background: var(--amber); }
+  .bar.Stop, .bar.SubagentStop { background: var(--green); }
+  .bar.PreToolUse, .bar.PostToolUse { background: var(--blue); }
+  .bar.usage { background: var(--panel-2); }
+  .bar.unknown { background: var(--border); }
+  .time { color: var(--text-dim); white-space: nowrap; }
+  .desc .type { font-family: 'Space Grotesk', sans-serif; font-weight: 600; margin-right: 8px; }
+  .desc .detail { color: var(--text-dim); word-break: break-word; }
+  .proj-tag {
+    color: var(--text-dim);
+    background: var(--panel-2);
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .load-more {
+    margin-top: 10px;
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .load-more:hover { background: var(--panel-2); color: var(--text); }
+  .load-more:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .load-more[hidden] { display: none; }
+
+  /* --- toasts --- */
+  #toasts {
+    position: fixed; right: 18px; bottom: 18px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 50;
+  }
+  .toast {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    animation: slidein .22s ease;
+  }
+  .toast.error { border-left-color: var(--red); }
+  @keyframes slidein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  @media (max-width: 760px) {
+    header { padding: 16px 18px; }
+    main { padding: 18px 16px 40px; }
+    .budget-grid { grid-template-columns: 1fr; }
+    .window-cards { grid-template-columns: 1fr 1fr; }
+    .budget-value { font-size: 34px; }
+    .feed-item { grid-template-columns: 4px 1fr; grid-template-areas: "b t" "b d" "b p"; gap: 4px 12px; }
+    .feed-item .time { grid-area: t; }
+    .feed-item .desc { grid-area: d; }
+    .feed-item .proj-tag { grid-area: p; justify-self: start; }
+    .feed-item .bar { grid-area: b; }
+    .history { grid-template-columns: repeat(7, 1fr); }
+    .hist-col:nth-child(-n+7) { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="pulse" id="pulseDot"></span> Claude Code Monitor</h1>
+    <span class="conn-status" id="connStatus">menyambung…</span>
+  </header>
+
+  <main>
+    <section aria-labelledby="budgetHeading">
+      <p class="eyebrow" id="budgetHeading">Budget harian</p>
+      <div class="budget-grid">
+        <div class="card" id="budgetCard">
+          <div class="skeleton" style="height:40px;width:200px;margin-bottom:14px"></div>
+          <div class="skeleton" style="height:12px"></div>
+          <div class="skeleton" style="height:12px;width:60%;margin-top:12px"></div>
+        </div>
+        <div class="window-cards" id="windowCards">
+          <div class="card"><div class="skeleton" style="height:56px"></div></div>
+          <div class="card"><div class="skeleton" style="height:56px"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="histHeading">
+      <p class="eyebrow" id="histHeading">14 hari terakhir</p>
+      <div class="card">
+        <div class="history" id="history"></div>
+        <div class="legend">
+          <span>Tinggi bar = % limit mingguan yang dipakai hari itu</span>
+          <span style="color:var(--blue)">— — garis budget</span>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="sessHeading">
+      <p class="eyebrow" id="sessHeading">Sesi aktif</p>
+      <div id="sessionRow"><div class="empty">Belum ada sesi terpantau.</div></div>
+    </section>
+
+    <section aria-labelledby="feedHeading">
+      <p class="eyebrow" id="feedHeading">Live activity</p>
+      <div id="feed"><div class="empty" style="padding:16px;">Menunggu event dari Claude Code…</div></div>
+      <button type="button" class="load-more" id="feedMore" hidden></button>
+    </section>
+  </main>
+
+  <div id="toasts" role="status" aria-live="polite"></div>
+
+<script>
+  const feedEl = document.getElementById('feed');
+  const feedMoreEl = document.getElementById('feedMore');
+  const sessionRowEl = document.getElementById('sessionRow');
+  const budgetCardEl = document.getElementById('budgetCard');
+  const windowCardsEl = document.getElementById('windowCards');
+  const historyEl = document.getElementById('history');
+  const connStatus = document.getElementById('connStatus');
+  const pulseDot = document.getElementById('pulseDot');
+  const toastsEl = document.getElementById('toasts');
+
+  const usageBySession = new Map();
+  const MAX_FEED_ITEMS = 200;
+  const FEED_INITIAL = 5;
+  const FEED_PAGE = 10;
+  const feedItems = []; // newest first
+  // How far the feed is unfolded is session state, not a lasting preference.
+  let feedVisible = parseInt(sessionStorage.getItem('ccm.feedVisible'), 10) || FEED_INITIAL;
+  let daily = null;
+  let editingBudget = false; // don't stomp on the input while it is focused
+
+  // --- helpers -------------------------------------------------------------
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  function num(n, d = 1) {
+    if (typeof n !== 'number') return '–';
+    return Number.isInteger(n) ? String(n) : n.toFixed(d);
+  }
+  function countdown(ts) {
+    if (!ts) return '–';
+    const ms = ts - Date.now();
+    if (ms <= 0) return 'sebentar lagi';
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (h >= 24) return Math.floor(h / 24) + 'h ' + (h % 24) + 'j lagi';
+    return h > 0 ? `${h}j ${m}m lagi` : `${m}m lagi`;
+  }
+  function levelOf(ratio) {
+    if (typeof ratio !== 'number') return '';
+    return ratio >= 100 ? 'crit' : ratio >= 80 ? 'warn' : 'ok';
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+  function toast(msg, kind = 'ok') {
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind === 'error' ? ' error' : '');
+    el.textContent = msg;
+    toastsEl.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  // --- daily budget card ---------------------------------------------------
+  function renderDaily() {
+    if (!daily) return;
+    const t = daily.today;
+    const ratio = typeof t.ratio === 'number' ? t.ratio : 0;
+    const lvl = levelOf(ratio);
+    const fillCls = lvl === 'ok' ? '' : lvl;
+    const pill = ratio >= 100 ? ['crit', 'lewat budget'] : ratio >= 80 ? ['warn', 'hampir habis'] : ['ok', 'aman'];
+    const pace = daily.pace;
+    const paceMarker = pace && t.budget > 0
+      ? Math.min(100, (pace.recommended / t.budget) * 100)
+      : null;
+
+    budgetCardEl.innerHTML = `
+      <div class="budget-head">
+        <span class="budget-value">${num(t.weekly)}%</span>
+        <span class="budget-of">dari jatah ${num(t.budget)}% limit mingguan</span>
+        <span class="pill ${pill[0]}">${pill[1]}</span>
+      </div>
+      <div class="bar-track" role="progressbar" aria-label="Pemakaian budget harian"
+           aria-valuemin="0" aria-valuemax="${num(t.budget)}" aria-valuenow="${num(t.weekly)}">
+        <div class="bar-fill ${fillCls}" style="width:${Math.min(100, ratio)}%"></div>
+        ${paceMarker !== null ? `<div class="bar-marker" style="left:${paceMarker}%" title="pace ideal"></div>` : ''}
+      </div>
+      <div class="meta-row">
+        <span>sisa <b>${num(t.remaining)}%</b></span>
+        <span>reset <b>${countdown(t.resetsAt)}</b></span>
+        <span>window 5 jam hari ini <b>${num(t.fiveHour)}%</b></span>
+        ${t.cost ? `<span>biaya <b>$${t.cost.toFixed(2)}</b></span>` : ''}
+      </div>
+      ${pace ? `<div class="hint">
+        Sisa limit mingguan <b>${num(pace.weeklyLeft)}%</b> untuk <b>${pace.daysLeft} hari</b> ke depan →
+        pace ideal <b>${num(pace.recommended)}%/hari</b>.
+      </div>` : ''}
+      <div class="budget-form">
+        <label for="budgetInput">Budget harian</label>
+        <input id="budgetInput" type="number" min="1" max="100" step="0.5" value="${num(t.budget)}"
+               inputmode="decimal" aria-describedby="budgetHelp" />
+        <span id="budgetHelp">% limit mingguan / hari</span>
+        <label for="dayStart" style="margin-left:8px">mulai jam</label>
+        <select id="dayStart">${Array.from({ length: 24 }, (_, h) =>
+          `<option value="${h}" ${h === daily.config.dayStartHour ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`
+        ).join('')}</select>
+        <span class="saved-flag" id="savedFlag">tersimpan</span>
+      </div>
+    `;
+    wireBudgetForm();
+  }
+
+  let saveTimer = null;
+  function wireBudgetForm() {
+    const input = document.getElementById('budgetInput');
+    const select = document.getElementById('dayStart');
+    input.addEventListener('focus', () => (editingBudget = true));
+    input.addEventListener('blur', () => (editingBudget = false));
+    // No save button: preferences persist on their own, debounced.
+    input.addEventListener('input', () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveConfig({ budgetPercent: parseFloat(input.value) }), 400);
+    });
+    select.addEventListener('change', () => saveConfig({ dayStartHour: parseInt(select.value, 10) }));
+  }
+
+  async function saveConfig(patch) {
+    if (patch.budgetPercent !== undefined && !(patch.budgetPercent > 0 && patch.budgetPercent <= 100)) return;
+    const backup = daily;
+    // Optimistic: reflect the new budget immediately, roll back if the PUT fails.
+    if (patch.budgetPercent !== undefined) {
+      const t = daily.today;
+      t.budget = patch.budgetPercent;
+      t.remaining = +(t.budget - t.weekly).toFixed(2);
+      t.ratio = +((t.weekly / t.budget) * 100).toFixed(1);
+      if (!editingBudget) renderDaily();
+      renderHistory();
+    }
+    try {
+      const res = await fetch('/api/daily/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error('gagal');
+      const data = await res.json();
+      daily = data.daily;
+      const flag = document.getElementById('savedFlag');
+      if (flag) { flag.classList.add('show'); setTimeout(() => flag.classList.remove('show'), 1400); }
+      renderHistory();
+      renderWindows();
+    } catch (e) {
+      daily = backup;
+      renderDaily();
+      renderHistory();
+      toast('Gagal menyimpan budget — server tidak merespons.', 'error');
+    }
+  }
+
+  // --- 5h / weekly window cards -------------------------------------------
+  function renderWindows() {
+    if (!daily) return;
+    const wins = [
+      ['Window 5 jam', daily.limits.fiveHour],
+      ['Limit mingguan', daily.limits.sevenDay],
+    ];
+    windowCardsEl.innerHTML = wins.map(([title, w]) => {
+      if (!w) return `<div class="card win-card"><div class="win-title">${title}</div>
+        <div class="empty" style="padding:0;font-size:12px">belum ada data</div></div>`;
+      const lvl = levelOf(w.percent);
+      return `<div class="card win-card">
+        <div class="win-title">${title}<span class="win-pct">${num(w.percent)}%</span></div>
+        <div class="bar-track" role="progressbar" aria-label="${title}"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="${num(w.percent)}">
+          <div class="bar-fill ${lvl === 'ok' ? '' : lvl}" style="width:${Math.min(100, w.percent)}%"></div>
+        </div>
+        <div class="win-foot">reset ${countdown(w.resetsAt)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // --- history -------------------------------------------------------------
+  function renderHistory() {
+    if (!daily) return;
+    const budget = daily.today.budget;
+    const max = Math.max(budget * 1.25, ...daily.history.map((d) => d.weekly), 1);
+    const todayKey = daily.date;
+    historyEl.innerHTML = daily.history.map((d) => {
+      const h = Math.max(2, (d.weekly / max) * 68);
+      const ratio = budget > 0 ? (d.weekly / budget) * 100 : 0;
+      const lvl = d.weekly === 0 ? '' : levelOf(ratio);
+      const label = d.date.slice(8);
+      return `<div class="hist-col" title="${d.date}: ${num(d.weekly)}% limit mingguan${d.cost ? ' · $' + d.cost.toFixed(2) : ''}">
+        <div class="hist-bar ${lvl} ${d.date === todayKey ? 'today' : ''}" style="height:${h}px"></div>
+        <div class="hist-label">${label}</div>
+      </div>`;
+    }).join('') + `<div class="budget-line" style="bottom:${18 + (budget / max) * 68}px"></div>`;
+  }
+
+  // --- sessions ------------------------------------------------------------
+  function renderSessions() {
+    if (usageBySession.size === 0) return;
+    sessionRowEl.innerHTML = '';
+    for (const [sessionId, u] of usageBySession.entries()) {
+      const card = document.createElement('div');
+      card.className = 'sess-card';
+      card.innerHTML = `
+        <div class="proj">${esc(u.project)}</div>
+        <div class="sess-meta">
+          ${esc(u.model || 'model ?')} · ${u.cost ? '$' + u.cost.toFixed(2) : '$0.00'}
+          <br>update ${fmtTime(u.updatedAt)}
+        </div>`;
+      sessionRowEl.appendChild(card);
+    }
+  }
+
+  // --- feed ----------------------------------------------------------------
+  function labelFor(evt) {
+    switch (evt.type) {
+      case 'Notification': return ['Butuh input', evt.payload.message || ''];
+      case 'Stop': return ['Task selesai', ''];
+      case 'SubagentStop': return ['Subagent selesai', ''];
+      case 'PreToolUse': return ['Tool dipanggil', evt.payload.tool_name || evt.payload.toolName || ''];
+      case 'PostToolUse': return ['Tool selesai', evt.payload.tool_name || evt.payload.toolName || ''];
+      default: return [evt.type, ''];
+    }
+  }
+
+  function feedRow(evt) {
+    const [title, detail] = labelFor(evt);
+    return `<div class="feed-item">
+      <div class="bar ${evt.type}"></div>
+      <div class="time">${fmtTime(evt.time)}</div>
+      <div class="desc"><span class="type">${esc(title)}</span><span class="detail">${esc(detail)}</span></div>
+      <div class="proj-tag">${esc(evt.project)}</div>
+    </div>`;
+  }
+
+  // Only the newest `feedVisible` rows are in the DOM; the rest wait behind the
+  // load-more button so a long-running session doesn't bury the cards above.
+  function renderFeed() {
+    if (feedItems.length === 0) {
+      feedEl.innerHTML = '<div class="empty" style="padding:16px;">Belum ada event. Jalankan Claude Code di project mana pun — aktivitasnya muncul di sini.</div>';
+      feedMoreEl.hidden = true;
+      return;
+    }
+    feedEl.innerHTML = feedItems.slice(0, feedVisible).map(feedRow).join('');
+    const rest = feedItems.length - feedVisible;
+    feedMoreEl.hidden = rest <= 0;
+    if (rest > 0) feedMoreEl.textContent = `Muat ${Math.min(FEED_PAGE, rest)} lagi — ${rest} event tersembunyi`;
+  }
+
+  function addFeedItem(evt) {
+    if (evt.type === 'usage') return; // statusLine fires constantly — not feed material
+    feedItems.unshift(evt);
+    if (feedItems.length > MAX_FEED_ITEMS) feedItems.length = MAX_FEED_ITEMS;
+  }
+
+  feedMoreEl.addEventListener('click', () => {
+    feedVisible = Math.min(feedItems.length, feedVisible + FEED_PAGE);
+    sessionStorage.setItem('ccm.feedVisible', String(feedVisible));
+    renderFeed();
+  });
+
+  // --- boot ----------------------------------------------------------------
+  async function loadInitial() {
+    try {
+      const [events, usage, dailyData] = await Promise.all([
+        fetch('/api/events?limit=100').then((r) => r.json()),
+        fetch('/api/usage').then((r) => r.json()),
+        fetch('/api/daily').then((r) => r.json()),
+      ]);
+      daily = dailyData;
+      renderDaily();
+      renderWindows();
+      renderHistory();
+
+      events.forEach(addFeedItem); // API returns oldest first, unshift flips it
+      renderFeed();
+
+      usage.forEach((u) => usageBySession.set(u.sessionId, u));
+      renderSessions();
+    } catch (e) {
+      console.error(e);
+      budgetCardEl.innerHTML = '<div class="empty">Tidak bisa mengambil data dari server. Pastikan <code>npm start</code> masih jalan.</div>';
+      toast('Gagal memuat data dashboard.', 'error');
+    }
+  }
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      connStatus.textContent = 'terhubung';
+      pulseDot.classList.remove('off');
+    };
+    ws.onclose = () => {
+      connStatus.textContent = 'terputus — mencoba lagi…';
+      pulseDot.classList.add('off');
+      setTimeout(connect, 2000);
+    };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      if (data.kind === 'event') {
+        addFeedItem(data.event);
+        renderFeed();
+      } else if (data.kind === 'usage') {
+        usageBySession.set(data.sessionId, data.usage);
+        renderSessions();
+      } else if (data.kind === 'daily') {
+        daily = data.daily;
+        if (!editingBudget) renderDaily();
+        renderWindows();
+        renderHistory();
+      }
+    };
+  }
+
+  // Keep the "reset in …" countdowns honest even when nothing is happening.
+  setInterval(() => {
+    if (!daily || editingBudget) return;
+    renderDaily();
+    renderWindows();
+  }, 30000);
+
+  loadInitial();
+  connect();
+</script>
+</body>
+</html>

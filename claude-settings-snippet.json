@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js Notification" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js Stop" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js SubagentStop" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js PreToolUse" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/report.js PostToolUse" }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/statusline.js"
+  }
+}
