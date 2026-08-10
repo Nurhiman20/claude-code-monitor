@@ -50,8 +50,8 @@ Event yang disambungkan:
 | Hook event      | Kapan terpicu                              | Efek di app ini                          |
 |------------------|---------------------------------------------|-------------------------------------------|
 | `Notification`   | Claude butuh input/izin dari kamu           | Notif desktop + Telegram                  |
-| `Stop`            | Claude selesai merespons/menyelesaikan task | Notif desktop + Telegram                  |
-| `SubagentStop`    | Subagent (Task tool) selesai                | Notif desktop + Telegram                  |
+| `Stop`            | Claude selesai merespons/menyelesaikan task | Notif desktop + Telegram **berisi ringkasan** (lihat bagian 6) |
+| `SubagentStop`    | Subagent (Task tool) selesai                | Notif desktop + Telegram + ringkasan      |
 | `PreToolUse`/`PostToolUse` | Setiap kali tool dipanggil/selesai   | Masuk ke live feed saja (tanpa notif, biar nggak spam) |
 | `PreToolUse` (`ask.js permission`) | Sebelum tool berisiko dijalankan | Minta izin lewat Telegram/dashboard (kalau diaktifkan) |
 | `Stop` (`ask.js question`)  | Claude berhenti sambil bertanya   | Pertanyaannya dikirim ke Telegram, balasanmu dikirim balik ke agent |
@@ -125,6 +125,23 @@ Lalu di settings Claude Code, tambahkan dua entry dari `claude-settings-snippet.
 | `/help` | Daftar perintah |
 | _teks biasa_ | Jawaban buat pertanyaan Claude yang lagi nunggu |
 
+## 6. Ringkasan task selesai
+
+Waktu hook `Stop` masuk, server membaca **pesan terakhir Claude** dari transcript sesi itu, membuang Markdown-nya, lalu menempelkan jejak tool sejak Stop sebelumnya. Tanpa panggilan model tambahan — jadi nol biaya dan nol delay.
+
+```
+Task selesai — claude-monitor
+Fix token expiry di auth.js. · ganti < jadi <=
+2 tool · auth.js
+```
+
+| Env | Default | Guna |
+|-----|---------|------|
+| `CCM_STOP_SUMMARY` | `1` | `0` = balik ke teks generik |
+| `CCM_SUMMARY_MAX_CHARS` | `180` | Panjang maksimal baris ringkasan |
+
+Baris pertama diambil dari kalimat pembuka Claude (ditambah baris kedua kalau yang pertama pendek). Kalau transcript nggak kebaca, notifnya jatuh balik ke teks generik.
+
 ## API
 
 | Endpoint | Guna |
@@ -146,6 +163,8 @@ claude-monitor/
 │   ├── daily.js         ← akumulasi pemakaian harian + budget & alert
 │   ├── store.js         ← penyimpanan event (JSONL) + status usage per sesi
 │   ├── notifiers.js      ← desktop notif (node-notifier) + Telegram
+│   ├── summary.js        ← ringkasan singkat saat task selesai
+│   ├── transcript.js     ← baca pesan terakhir Claude dari file transcript
 │   ├── bot.js            ← sisi masuk Telegram: perintah, tombol approve, jawaban
 │   ├── approvals.js      ← aturan & pesan approval jarak jauh (allowlist, timeout)
 │   ├── pending.js        ← permintaan yang lagi ditahan sambil nunggu jawaban

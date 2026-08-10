@@ -9,8 +9,8 @@
 // bad JSON, feature disabled) exits 0 with no output — Claude Code then falls
 // back to its normal local prompt. Failing open is the whole safety story here.
 
-const fs = require("fs");
 const http = require("http");
+const { lastAssistantText } = require("../server/transcript");
 
 const PORT = process.env.CCM_PORT || 4756;
 const mode = process.argv[2] === "question" ? "question" : "permission";
@@ -26,42 +26,6 @@ function bail() {
 // Never let the hook outlive the server's own deadline by much.
 const guard = setTimeout(bail, TIMEOUT_MS + 15000);
 guard.unref?.();
-
-// --- transcript ------------------------------------------------------------
-// Stop hooks get a `transcript_path` (JSONL) but not the message text itself,
-// so pull the last assistant turn out of the tail of the file.
-function lastAssistantText(file) {
-  try {
-    const { size } = fs.statSync(file);
-    const start = Math.max(0, size - 262144);
-    const fd = fs.openSync(file, "r");
-    const buf = Buffer.alloc(size - start);
-    fs.readSync(fd, buf, 0, buf.length, start);
-    fs.closeSync(fd);
-
-    const lines = buf.toString("utf8").split("\n").filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      let entry;
-      try {
-        entry = JSON.parse(lines[i]);
-      } catch {
-        continue; // first line is usually a partial record — skip it
-      }
-      const msg = entry.message || entry;
-      if (entry.type !== "assistant" && msg.role !== "assistant") continue;
-      const content = msg.content;
-      const text = Array.isArray(content)
-        ? content.filter((c) => c && c.type === "text").map((c) => c.text).join("\n").trim()
-        : typeof content === "string"
-          ? content.trim()
-          : "";
-      if (text) return text;
-    }
-  } catch {
-    /* unreadable transcript — caller falls back to a generic prompt */
-  }
-  return "";
-}
 
 function looksLikeQuestion(text) {
   const tail = text.split("\n").filter(Boolean).slice(-3).join(" ");

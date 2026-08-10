@@ -7,6 +7,7 @@ const store = require("./store");
 const daily = require("./daily");
 const { notifyBoth, desktopNotify, telegramNotify } = require("./notifiers");
 const approvals = require("./approvals");
+const summary = require("./summary");
 const bot = require("./bot");
 
 const PORT = process.env.CCM_PORT || 4756;
@@ -64,10 +65,13 @@ app.post("/api/event", (req, res) => {
       );
       break;
     case "Stop":
-      notifyBoth(`Task selesai — ${project}`, "Claude Code selesai mengerjakan task ini.");
+      notifyBoth(`Task selesai — ${project}`, summary.forStop(payload, store.getRecent(500), sessionId));
       break;
     case "SubagentStop":
-      notifyBoth(`Subagent selesai — ${project}`, "Salah satu subagent sudah selesai.");
+      notifyBoth(
+        `Subagent selesai — ${project}`,
+        summary.forStop(payload, store.getRecent(500), sessionId, "SubagentStop")
+      );
       break;
     case "PreToolUse":
     case "PostToolUse":
