@@ -230,4 +230,5 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 server.listen(PORT, () => {
   console.log(`Claude Code Monitor listening on http://localhost:${PORT}`);
   bot.start();
+  notifyBoth("Claude Monitor nyala", `Server jalan di http://localhost:${PORT}`);
 });
