@@ -29,6 +29,7 @@ const EMPTY_DAY = { weekly: 0, fiveHour: 0, cost: 0, firstAt: null, lastAt: null
 // 1-point tick, so it must never claim a whole point on its own.
 const MAX_FRAC = 0.9;
 const RATE_SMOOTHING = 0.3;
+const ROLLOVER_MARGIN_MS = 30 * 60000;
 
 const EMPTY_EST = { frac: 0, costSinceTick: 0, rate: null };
 
@@ -105,17 +106,37 @@ function prune() {
 }
 
 // How much of `next` was consumed since the previous sample of the same window.
+//
+// Every open session reports the limits from its *own* last API response, so an
+// idle session keeps sending stale numbers. Samples interleave (idle 14%, active
+// 16%, idle 14%, ...) and following them blindly re-counts the same 2 points on
+// every flip. The baseline therefore only ever moves forward: a lower percent or
+// an older window is stale and ignored.
 function windowDelta(name, next) {
   if (!next || typeof next.percent !== "number") return 0;
   const prev = db.state[name];
-  db.state[name] = { percent: next.percent, resetsAt: next.resetsAt ?? null, at: Date.now() };
+  const set = () => {
+    db.state[name] = { percent: next.percent, resetsAt: next.resetsAt ?? null, at: Date.now() };
+  };
 
   // First sample ever: only establish a baseline. Attributing the whole running
   // total to today would wildly overstate the first day of tracking.
-  if (!prev) return 0;
-  // Window rolled over — everything on the clock was burned inside the new window.
-  if (next.resetsAt && prev.resetsAt && next.resetsAt !== prev.resetsAt) return next.percent;
-  return Math.max(0, next.percent - prev.percent);
+  if (!prev) {
+    set();
+    return 0;
+  }
+  if (next.resetsAt && prev.resetsAt) {
+    // Window rolled over — everything on the clock was burned inside the new window.
+    // The margin absorbs jitter in how the reset time is reported.
+    if (next.resetsAt > prev.resetsAt + ROLLOVER_MARGIN_MS) {
+      set();
+      return next.percent;
+    }
+    if (next.resetsAt < prev.resetsAt - ROLLOVER_MARGIN_MS) return 0; // from the previous window
+  }
+  if (next.percent <= prev.percent) return 0;
+  set();
+  return next.percent - prev.percent;
 }
 
 function costDelta(sessionId, total) {
@@ -178,6 +199,12 @@ function record({ fiveHour, sevenDay, cost, sessionId, at = Date.now() }) {
   day.fiveHour = +(day.fiveHour + windowDelta("fiveHour", fiveHour)).toFixed(2);
   // A tick can reconcile the estimate downwards, so clamp instead of going negative.
   day.weekly = +Math.max(0, day.weekly + weeklyDelta(sevenDay, spend)).toFixed(2);
+  // Sanity cap: if the weekly window opened no later than today did, today can't
+  // have used more of it than the window has on its clock in total.
+  const week = db.state.sevenDay;
+  if (week?.resetsAt && week.resetsAt - 7 * DAY_MS <= dayBounds(at).start) {
+    day.weekly = Math.min(day.weekly, +(week.percent + db.state.weeklyEst.frac).toFixed(2));
+  }
   day.lastAt = at;
 
   const budget = db.config.budgetPercent;
