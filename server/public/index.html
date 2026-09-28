@@ -194,6 +194,7 @@
     line-height: 1.55;
   }
   .hint b { color: var(--blue); font-weight: 600; }
+  .hint b.neg { color: var(--red); }
 
   .budget-form {
     display: flex;
@@ -526,6 +527,11 @@
       ${pace ? `<div class="hint">
         Sisa limit mingguan <b>${num(pace.weeklyLeft)}%</b> untuk <b>${pace.daysLeft} hari</b> ke depan →
         pace ideal <b>${num(pace.recommended)}%/hari</b>.
+      </div>` : ''}
+      ${daily.allowance ? `<div class="hint">
+        Sisa jatah kumulatif <b class="${daily.allowance.left < 0 ? 'neg' : ''}">${num(daily.allowance.left)}%</b>
+        — jatah s/d hari ke-${daily.allowance.dayIndex + 1} window mingguan <b>${num(daily.allowance.total)}%</b>,
+        terpakai <b>${num(daily.limits.sevenDay.percent)}%</b>. Bertambah <b>${countdown(daily.allowance.resetsAt)}</b>.
       </div>` : ''}
       <div class="budget-form">
         <label for="budgetInput">Budget harian</label>

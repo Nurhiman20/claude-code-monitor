@@ -44,7 +44,10 @@ function budgetSuffix(summary) {
   const { weekly, budget, ratio } = summary.today;
   // green under pace, amber when close, red once the daily budget is gone.
   const color = ratio >= 100 ? "31" : ratio >= 80 ? "33" : "32";
-  return `\u001b[${color}mhari ${round(weekly)}/${round(budget)}%\u001b[0m`;
+  const day = `\u001b[${color}mhari ${round(weekly)}/${round(budget)}%\u001b[0m`;
+  const left = summary.allowance?.left;
+  if (typeof left !== "number") return day;
+  return `${day} \u001b[${left < 0 ? "31" : "2"}mjatah ${round(left)}%\u001b[0m`;
 }
 
 function round(n) {

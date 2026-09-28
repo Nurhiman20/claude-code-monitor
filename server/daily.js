@@ -254,6 +254,22 @@ function summary(now = Date.now()) {
     };
   }
 
+  // Cumulative allowance: every day of the weekly window adds `budget` to the pot,
+  // so under-use on earlier days carries over and over-use eats into today.
+  // Days follow the window's own clock (its reset time), not dayStartHour.
+  let allowance = null;
+  if (sevenDay && sevenDay.resetsAt && budget > 0) {
+    const windowStart = sevenDay.resetsAt - 7 * DAY_MS;
+    const dayIndex = Math.min(6, Math.max(0, Math.floor((now - windowStart) / DAY_MS)));
+    const total = +(budget * (dayIndex + 1)).toFixed(2);
+    allowance = {
+      dayIndex,
+      total,
+      left: +(total - sevenDay.percent).toFixed(2),
+      resetsAt: windowStart + (dayIndex + 1) * DAY_MS,
+    };
+  }
+
   return {
     date: key,
     config: db.config,
@@ -271,6 +287,7 @@ function summary(now = Date.now()) {
     },
     limits: { fiveHour, sevenDay },
     pace,
+    allowance,
     history: historyFrom(now),
   };
 }

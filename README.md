@@ -65,7 +65,8 @@ Claude Code cuma melaporkan total window berjalan (`five_hour` dan `seven_day`),
 - Batas hari default jam `00:00` lokal; bisa digeser (misal jam 04:00) lewat dropdown di kartu yang sama.
 - Notifikasi desktop + Telegram di **50%, 80%, 100%, dan 120%** budget harian. Kalau satu sampel melompati dua ambang sekaligus, yang dinotifikasi cuma yang tertinggi.
 - **Pace ideal** = sisa limit mingguan ÷ sisa hari sampai window mingguan reset. Ditandai garis biru di bar — kalau isian bar belum melewatinya, kamu masih di jalur aman.
-- Status bar Claude Code ikut menampilkan `hari 6/14%` (hijau/kuning/merah). Matikan dengan `CCM_STATUSLINE_SUFFIX=0`.
+- **Sisa jatah kumulatif** = budget × (hari ke-N window mingguan) − pemakaian mingguan. Contoh: mingguan 31%, sedang di hari ke-3 → 14 × 3 − 31 = **11%**. Sisa/kelebihan hari sebelumnya ikut terbawa; hari dihitung dari jam reset window mingguan, bukan `dayStartHour`.
+- Status bar Claude Code ikut menampilkan `hari 6/14% jatah 11%` (hijau/kuning/merah; jatah merah kalau minus). Matikan dengan `CCM_STATUSLINE_SUFFIX=0`.
 
 Catatan: sampel **pertama** setelah tracking dimulai cuma dipakai sebagai baseline (tidak dihitung sebagai pemakaian hari itu), supaya total window yang sudah berjalan sebelum server nyala tidak salah dibebankan ke hari pertama. Data tersimpan di `server/data/daily-usage.json` dan tahan restart; riwayat disimpan 60 hari.
 

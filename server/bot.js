@@ -15,7 +15,7 @@ function fmtTime(ts) {
 
 function limitReply() {
   const s = daily.summary();
-  const { today, limits, pace } = s;
+  const { today, limits, pace, allowance } = s;
 
   const lines = [`📊 *Limit Claude Code* (${s.date})`, ""];
 
@@ -34,6 +34,9 @@ function limitReply() {
   );
   lines.push(`Sisa budget hari ini: ${today.remaining}%`);
   if (typeof today.cost === "number") lines.push(`Cost hari ini: $${today.cost.toFixed(2)}`);
+  if (allowance) {
+    lines.push(`Sisa jatah kumulatif: *${allowance.left}%* (jatah s/d hari ke-${allowance.dayIndex + 1}: ${allowance.total}%)`);
+  }
   if (pace) lines.push(`Saran pemakaian/hari: ${pace.recommended}% (${pace.daysLeft} hari lagi)`);
 
   return lines.join("\n");
