@@ -9,6 +9,7 @@ const { notifyBoth, desktopNotify, telegramNotify } = require("./notifiers");
 const approvals = require("./approvals");
 const summary = require("./summary");
 const bot = require("./bot");
+const metaads = require("./metaads");
 
 const PORT = process.env.CCM_PORT || 4756;
 const THRESHOLDS = [50, 75, 90]; // percent usage checkpoints to alert on
@@ -230,5 +231,6 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 server.listen(PORT, () => {
   console.log(`Claude Code Monitor listening on http://localhost:${PORT}`);
   bot.start();
+  metaads.start();
   notifyBoth("Claude Monitor nyala", `Server jalan di http://localhost:${PORT}`);
 });

@@ -1,5 +1,6 @@
 const daily = require("./daily");
 const approvals = require("./approvals");
+const metaads = require("./metaads");
 
 // Long-polls Telegram getUpdates so the bot can answer commands like /limit.
 // notifiers.js only pushes outbound alerts — this is the inbound half.
@@ -45,6 +46,7 @@ function limitReply() {
 const HELP = [
   "Perintah:",
   "/limit — cek limit & budget hari ini",
+  "/ads — report Meta Ads sekarang",
   "/pending — permintaan yang lagi nunggu jawaban",
   "/done — biarkan Claude berhenti (batal jawab pertanyaan)",
   "/help — tampilkan pesan ini",
@@ -80,6 +82,8 @@ async function handleMessage(msg) {
 
   if (text.startsWith("/limit") || text.startsWith("/usage") || text.startsWith("/status")) {
     await reply(limitReply());
+  } else if (text.startsWith("/ads")) {
+    await metaads.report({ manual: true });
   } else if (text.startsWith("/pending")) {
     await reply(pendingReply(), null);
   } else if (text.startsWith("/done") || text.startsWith("/stop")) {

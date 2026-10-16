@@ -121,6 +121,7 @@ Lalu di settings Claude Code, tambahkan dua entry dari `claude-settings-snippet.
 | Perintah | Guna |
 |----------|------|
 | `/limit` | Limit & budget hari ini |
+| `/ads` | Report Meta Ads sekarang (lihat bagian 7) |
 | `/pending` | Permintaan yang lagi nunggu jawaban |
 | `/done` | Biarkan Claude berhenti (batal menjawab) |
 | `/help` | Daftar perintah |
@@ -142,6 +143,24 @@ Fix token expiry di auth.js. · ganti < jadi <=
 | `CCM_SUMMARY_MAX_CHARS` | `180` | Panjang maksimal baris ringkasan |
 
 Baris pertama diambil dari kalimat pembuka Claude (ditambah baris kedua kalau yang pertama pendek). Kalau transcript nggak kebaca, notifnya jatuh balik ke teks generik.
+
+## 7. Pemantau Meta Ads
+
+`server/metaads.js` membaca akun iklan Happi CareerPlan (token `ads_read`, GET saja) dan
+mengirim report ke Telegram di jam `META_REPORT_HOURS` WIB (bawaan 07, 10, 13, 16, 19, 22):
+angka hari ini dan kumulatif tahap per ad set, angka situs dan penjualan iPaymu dari app,
+plus **PERLU TINDAKAN** menurut aturan keputusan di `happi-careerplan/marketing/acquisition-system.md`.
+
+Masalah mendesak (akun bermasalah, iklan ditolak, ad set tidak tayang, budget diubah, gagal
+baca Meta) dicek tiap jam, 24 jam, dan dikirim sekali per hari per masalah.
+
+- Token: `META_ACCESS_TOKEN` dan `META_ACCOUNT_ID` di env User Windows. Kalau proses server
+  tidak mewarisinya, dibaca langsung dari registry (`HKCU\Environment`).
+- Pindah tahap: ubah `META_PHASE_*` di `server/.env`, restart server.
+- Angka situs dan penjualan butuh `HAPPI_STATS_TOKEN` (sama dengan `statsToken` app).
+- Jadwal tahan restart dan laptop tidur: yang dikirim hanya slot terbaru, dan hanya kalau
+  belum lewat 3 jam. State di `server/data/metaads-state.json`.
+- Uji tanpa kirim: `node -e "require('dotenv').config(); require('./metaads').report({ dryRun: true }).then(console.log)"` dari `server/`.
 
 ## API
 
