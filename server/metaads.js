@@ -486,6 +486,15 @@ function compose(cfg, snap, verdict, now, { urgentOnly = false } = {}) {
   const meta = snap.stats?.by_source?.find((r) => r.source === "meta");
   if (meta) {
     out.push("", `SITUS (7 hari, kanal meta): ${meta.generate} hasil, ${meta.pay_success} bayar. Lead Meta tahap ini ${phaseTotal.lead}.`);
+    // Full funnel only once the app reports it per channel (since 16 Okt 2026).
+    if (meta.gate_viewed !== undefined) {
+      out.push(`Corong: ${meta.gate_viewed} lihat tawaran · ${meta.pay_clicked} klik bayar · ${meta.pay_started} mulai bayar · ${meta.pay_success} lunas`);
+      const reasons = Object.entries(meta.feedback || {})
+        .filter(([key]) => key.startsWith("skip_"))
+        .sort((a, b) => b[1] - a[1])
+        .map(([key, n]) => `${key.slice(5)} ${n}`);
+      if (reasons.length) out.push(`Alasan belum bayar: ${reasons.join(", ")}`);
+    }
   }
 
   if (snap.sales) {
