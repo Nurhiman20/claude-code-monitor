@@ -493,7 +493,7 @@ function compose(cfg, snap, verdict, now, { urgentOnly = false } = {}) {
     out.push("", "PENJUALAN (iPaymu)");
     out.push(`Hari ini: ${s.today.count} pembelian, ${rp(s.today.amount)}`);
     out.push(
-      `${cfg.phaseName}: ${s.since.count} pembelian, ${rp(s.since.amount)}${salesMeta ? ` · dari meta ${salesMeta.count}, ${rp(salesMeta.amount)}` : ""}`
+      `${cfg.phaseName}: ${s.since_total.count} pembelian, ${rp(s.since_total.amount)}${salesMeta ? ` · dari meta ${salesMeta.count}, ${rp(salesMeta.amount)}` : ""}`
     );
     if (salesMeta && phaseTotal.lead) {
       const income = salesMeta.amount / phaseTotal.lead;
