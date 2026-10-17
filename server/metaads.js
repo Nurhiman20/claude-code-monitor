@@ -25,7 +25,7 @@ const TICK_MS = 5 * 60000;
 const URGENT_EVERY_MS = HOUR;
 const TELEGRAM_MAX = 4000;
 
-const RESERVES = "K1, K2, K3, K5";
+const RESERVES = "K4b > K7 > K8, masing-masing sesuai pemicunya";
 
 const ACCOUNT_STATUS = {
   2: "DISABLED (dinonaktifkan)",
@@ -72,7 +72,7 @@ function config() {
     phaseStart: env.META_PHASE_START || "2026-10-16",
     phaseEnd: env.META_PHASE_END || "2026-10-22",
     phaseBudget: num("META_PHASE_BUDGET", 1000000),
-    killCpl: num("META_KILL_CPL", 4000),
+    killCpl: num("META_KILL_CPL", 5000),
     winCpl: num("META_WIN_CPL", 1500),
     minSpend: num("META_MIN_SPEND", 50000),
     reportHours: (env.META_REPORT_HOURS || "7,10,13,16,19,22")
@@ -312,8 +312,8 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
     if (labels.get(s.id) !== "MATIKAN") continue;
     actions.push(
       s.phase.lead === 0
-        ? `MATIKAN ${s.name}: ${rp(s.phase.spend)} tanpa satu Lead. Ganti kreatif cadangan (${RESERVES}) di ad set baru.`
-        : `MATIKAN ${s.name}: ${rp(cpl(s.phase))}/Lead, di atas ${rp(cfg.killCpl)}. Ganti kreatif cadangan (${RESERVES}) di ad set baru.`
+        ? `MATIKAN ${s.name}: ${rp(s.phase.spend)} tanpa satu Lead. Pause saja, jangan langsung ganti. Cadangan: ${RESERVES}.`
+        : `MATIKAN ${s.name}: ${rp(cpl(s.phase))}/Lead, di atas ${rp(cfg.killCpl)}. Pause saja, jangan langsung ganti. Cadangan: ${RESERVES}.`
     );
   }
 
