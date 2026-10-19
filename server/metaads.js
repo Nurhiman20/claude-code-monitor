@@ -25,7 +25,7 @@ const TICK_MS = 5 * 60000;
 const URGENT_EVERY_MS = HOUR;
 const TELEGRAM_MAX = 4000;
 
-const RESERVES = "K4b > K7 > K8, masing-masing sesuai pemicunya";
+const RESERVES = "K4b > K7, masing-masing sesuai pemicunya";
 
 const ACCOUNT_STATUS = {
   2: "DISABLED (dinonaktifkan)",
@@ -75,6 +75,13 @@ function config() {
     killCpl: num("META_KILL_CPL", 5000),
     winCpl: num("META_WIN_CPL", 1500),
     minSpend: num("META_MIN_SPEND", 50000),
+    // Ad sets built for purchase intent (K8): judged by pay clicks, not by
+    // cost per Lead, since they are expected to bring fewer, pricier Leads.
+    intentAdsets: (env.META_INTENT_ADSETS ?? "k8-isi-roadmap")
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean),
+    intentMinSpend: num("META_INTENT_MIN_SPEND", 90000),
     reportHours: (env.META_REPORT_HOURS || "7,10,13,16,19,22")
       .split(",")
       .map(Number)
@@ -201,7 +208,7 @@ function action(row, type) {
 }
 
 function metrics(row) {
-  if (!row) return { spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, lpv: 0, lead: 0 };
+  if (!row) return { spend: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, lpv: 0, lead: 0, checkout: 0, purchase: 0 };
   return {
     spend: Number(row.spend) || 0,
     impressions: Number(row.impressions) || 0,
@@ -210,6 +217,9 @@ function metrics(row) {
     cpm: Number(row.cpm) || 0,
     lpv: action(row, "landing_page_view"),
     lead: action(row, "lead"),
+    // Pixel InitiateCheckout fires on the result page's pay button.
+    checkout: action(row, "initiate_checkout"),
+    purchase: action(row, "purchase"),
   };
 }
 
@@ -278,6 +288,8 @@ function total(list, key) {
     clicks: sum(list, (s) => s[key].clicks),
     lpv: sum(list, (s) => s[key].lpv),
     lead: sum(list, (s) => s[key].lead),
+    checkout: sum(list, (s) => s[key].checkout),
+    purchase: sum(list, (s) => s[key].purchase),
   };
 }
 
@@ -296,11 +308,16 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
   const labels = new Map();
 
   // Decision rule: judged per ad set once it has run 2 days and spent ~Rp 50.000.
-  const evaluable = (s) => day >= 2 && s.phase.spend >= cfg.minSpend;
+  // Purchase-intent ad sets have their own rule below and never count here.
+  const intent = (s) => cfg.intentAdsets.includes(s.name);
+  const evaluable = (s) => !intent(s) && day >= 2 && s.phase.spend >= cfg.minSpend;
+  const intentReady = (s) => intent(s) && s.phase.spend >= cfg.intentMinSpend;
   const cpl = (m) => (m.lead > 0 ? m.spend / m.lead : Infinity);
 
   for (const s of snap.adsets) {
     if (s.status !== "ACTIVE") labels.set(s.id, s.status === "PAUSED" || s.status === "CAMPAIGN_PAUSED" ? "mati" : s.status);
+    else if (intent(s) && !intentReady(s)) labels.set(s.id, `niat beli, dinilai di ${rp(cfg.intentMinSpend)}`);
+    else if (intent(s)) labels.set(s.id, s.phase.purchase > 0 ? "pemenang" : s.phase.checkout > 0 ? "lanjut" : "MATIKAN");
     else if (!evaluable(s)) labels.set(s.id, "belum dinilai");
     else if (s.phase.lead === 0) labels.set(s.id, "MATIKAN");
     else if (cpl(s.phase) > cfg.killCpl) labels.set(s.id, "MATIKAN");
@@ -310,6 +327,12 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
 
   for (const s of active) {
     if (labels.get(s.id) !== "MATIKAN") continue;
+    if (intent(s)) {
+      actions.push(
+        `MATIKAN ${s.name}: ${rp(s.phase.spend)} dengan ${s.phase.lead} Lead tapi 0 klik bayar. Kreatif niat beli ini tidak menarik pembeli. Pause saja.`
+      );
+      continue;
+    }
     actions.push(
       s.phase.lead === 0
         ? `MATIKAN ${s.name}: ${rp(s.phase.spend)} tanpa satu Lead. Pause saja, jangan langsung ganti. Cadangan: ${RESERVES}.`
@@ -318,15 +341,16 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
   }
 
   const judged = active.filter(evaluable);
-  if (judged.length && judged.length === active.length && judged.every((s) => cpl(s.phase) > cfg.killCpl)) {
+  const cplActive = active.filter((s) => !intent(s));
+  if (judged.length && judged.length === cplActive.length && judged.every((s) => cpl(s.phase) > cfg.killCpl)) {
     actions.push(
       `${cfg.phaseName} gagal: semua ad set di atas ${rp(cfg.killCpl)}/Lead. Stop semua, ganti kreatif cadangan, ulang minggu berikutnya.`
     );
   }
 
   const phaseTotal = total(snap.adsets, "phase");
-  if (day >= 5 && day <= length && active.length >= 5 && phaseTotal.spend >= cfg.phaseBudget * 0.75) {
-    const worst = [...active].sort((a, b) => cpl(b.phase) - cpl(a.phase)).slice(0, 2);
+  if (day >= 5 && day <= length && cplActive.length >= 5 && phaseTotal.spend >= cfg.phaseBudget * 0.75) {
+    const worst = [...cplActive].sort((a, b) => cpl(b.phase) - cpl(a.phase)).slice(0, 2);
     actions.push(
       `Hari ke-${day} dan sudah ${rp(phaseTotal.spend)} terpakai dengan 5 ad set hidup: matikan dua termahal, ${worst.map((s) => s.name).join(" dan ")}.`
     );
@@ -407,7 +431,7 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
   }
 
   // Diagnosis notes, from "Diagnosis kalau iklan mahal".
-  if (!judged.length && active.length) {
+  if (!judged.length && cplActive.length) {
     notes.push(`Belum ada yang bisa dinilai: ad set dinilai mulai hari ke-2 dan sesudah ${rp(cfg.minSpend)}. Jangan matikan apa pun dulu.`);
   }
   const hook = active.filter((s) => s.phase.impressions >= 500 && s.phase.ctr < 0.8);
@@ -443,7 +467,8 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
 function adsetLine(s, key, label) {
   const m = s[key];
   const lines = [`${s.name}${label ? ` [${label}]` : ""}: ${rp(m.spend)}`];
-  lines.push(`  klik ${m.clicks} · CTR ${pct(m.ctr)} · LPV ${m.lpv} · Lead ${m.lead} · ${cplText(m)}`);
+  const intent = m.checkout || m.purchase ? ` · klik bayar ${m.checkout} · beli ${m.purchase}` : "";
+  lines.push(`  klik ${m.clicks} · CTR ${pct(m.ctr)} · LPV ${m.lpv} · Lead ${m.lead} · ${cplText(m)}${intent}`);
   return lines.join("\n");
 }
 
