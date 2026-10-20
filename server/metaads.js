@@ -82,6 +82,12 @@ function config() {
       .map((n) => n.trim())
       .filter(Boolean),
     intentMinSpend: num("META_INTENT_MIN_SPEND", 90000),
+    // The ad account is shared with other products (ScoutCard uses `sc-`).
+    // Their ad sets are left out of every number, rule and alert here.
+    excludePrefixes: (env.META_EXCLUDE_PREFIXES ?? "sc-")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean),
     reportHours: (env.META_REPORT_HOURS || "7,10,13,16,19,22")
       .split(",")
       .map(Number)
@@ -228,8 +234,15 @@ async function snapshot(cfg, now, { withAges = false } = {}) {
   const act = cfg.account.startsWith("act_") ? cfg.account : `act_${cfg.account}`;
   const until = [wibDate(now), cfg.phaseEnd].sort()[0];
   const phaseRange = JSON.stringify({ since: cfg.phaseStart, until });
+  const ours = (name) => !cfg.excludePrefixes.some((p) => (name || "").startsWith(p));
+  // Account-level rows can't be filtered after the fact, so the age breakdown
+  // asks Graph to drop excluded ad sets. NOT_CONTAIN is the closest operator
+  // to "doesn't start with"; fine as long as prefixes don't appear mid-name.
+  const ageFilter = cfg.excludePrefixes.length
+    ? { filtering: JSON.stringify(cfg.excludePrefixes.map((p) => ({ field: "adset.name", operator: "NOT_CONTAIN", value: p }))) }
+    : {};
 
-  const [account, adsets, ads, today, phase, ages, stats, sales] = await Promise.all([
+  const [account, allAdsets, allAds, allToday, allPhase, ages, stats, sales] = await Promise.all([
     graph(cfg, act, { fields: "name,account_status,disable_reason,currency,timezone_name" }),
     graph(cfg, `${act}/adsets`, { fields: "id,name,effective_status,daily_budget", limit: "50" }),
     graph(cfg, `${act}/ads`, {
@@ -245,11 +258,16 @@ async function snapshot(cfg, now, { withAges = false } = {}) {
           breakdowns: "age",
           fields: "spend,inline_link_clicks,actions",
           limit: "50",
+          ...ageFilter,
         })
       : null,
     appJson(cfg, cfg.statsUrl),
     appJson(cfg, `${cfg.salesUrl}?since=${cfg.phaseStart}`),
   ]);
+  const adsets = allAdsets.filter((s) => ours(s.name));
+  const ads = allAds.filter((a) => ours(a.adset?.name));
+  const today = allToday.filter((r) => ours(r.adset_name));
+  const phase = allPhase.filter((r) => ours(r.adset_name));
 
   const byId = (rows) => new Map(rows.map((r) => [r.adset_id, r]));
   const todayById = byId(today);
@@ -596,6 +614,23 @@ async function report({ manual = false, dryRun = false, fixture = null } = {}) {
     await failed(cfg, e, now);
     if (manual) await telegramSend(`Gagal ambil data Meta: ${e.message}`);
     return null;
+  }
+
+  // Scheduled reports pause while no ad set runs: six reports a day of zeros
+  // are noise. One notice when it goes quiet; resumes on its own once an ad
+  // set is active again. `/ads` and urgent alerts keep working.
+  const idle = !snap.adsets.some((s) => s.status === "ACTIVE");
+  if (!manual && !dryRun) {
+    if (idle) {
+      state.failures = 0;
+      if (!state.idle) {
+        state.idle = true;
+        save();
+        await telegramSend("⏸ Tidak ada ad set Happi yang aktif. Report terjadwal Meta Ads berhenti sampai ada yang aktif lagi. /ads tetap bisa dipakai.");
+      }
+      return null;
+    }
+    state.idle = false;
   }
 
   const verdict = evaluate(cfg, snap, now, dryRun ? fixture?.budgets || {} : state.budgets);

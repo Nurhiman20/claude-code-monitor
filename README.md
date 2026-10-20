@@ -157,6 +157,10 @@ baca Meta) dicek tiap jam, 24 jam, dan dikirim sekali per hari per masalah.
 - Token: `META_ACCESS_TOKEN` dan `META_ACCOUNT_ID` di env User Windows. Kalau proses server
   tidak mewarisinya, dibaca langsung dari registry (`HKCU\Environment`).
 - Pindah tahap: ubah `META_PHASE_*` di `server/.env`, restart server.
+- Akun iklan dipakai bersama ScoutCard: ad set berawalan `META_EXCLUDE_PREFIXES` (bawaan `sc-`)
+  tidak ikut dihitung di mana pun.
+- Selama tidak ada ad set Happi yang aktif, report terjadwal berhenti (satu pesan ⏸ saat mulai
+  berhenti) dan jalan lagi sendiri begitu ada yang aktif. `/ads` dan peringatan mendesak tetap jalan.
 - Angka situs dan penjualan butuh `HAPPI_STATS_TOKEN` (sama dengan `statsToken` app).
 - Jadwal tahan restart dan laptop tidur: yang dikirim hanya slot terbaru, dan hanya kalau
   belum lewat 3 jam. State di `server/data/metaads-state.json`.
