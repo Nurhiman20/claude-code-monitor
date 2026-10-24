@@ -93,7 +93,7 @@ function config() {
       .map(Number)
       .filter((h) => Number.isInteger(h) && h >= 0 && h <= 23)
       .sort((a, b) => a - b),
-    statsUrl: env.HAPPI_STATS_URL || "https://www.happicareerplan.com/api/stats?days=7",
+    statsUrl: env.HAPPI_STATS_URL || "https://www.happicareerplan.com/api/stats",
     salesUrl: env.HAPPI_SALES_URL || "https://www.happicareerplan.com/api/admin/sales",
     statsToken: env.HAPPI_STATS_TOKEN || "",
   };
@@ -190,6 +190,14 @@ async function graph(cfg, pathname, params = {}) {
   return rows;
 }
 
+// Site numbers cover the same span as the phase, so the Lead check compares
+// like with like. An app without `since` support answers with `days` instead.
+function statsUrl(cfg) {
+  const url = new URL(cfg.statsUrl);
+  url.searchParams.set("since", cfg.phaseStart);
+  return url.toString();
+}
+
 async function appJson(cfg, url) {
   if (!cfg.statsToken) return null;
   try {
@@ -261,7 +269,7 @@ async function snapshot(cfg, now, { withAges = false } = {}) {
           ...ageFilter,
         })
       : null,
-    appJson(cfg, cfg.statsUrl),
+    appJson(cfg, statsUrl(cfg)),
     appJson(cfg, `${cfg.salesUrl}?since=${cfg.phaseStart}`),
   ]);
   const adsets = allAdsets.filter((s) => ours(s.name));
@@ -392,7 +400,7 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
 
   // Tracking check: Meta Lead vs results the site recorded from `utm_source=meta`.
   const meta = snap.stats?.by_source?.find((r) => r.source === "meta");
-  if (meta && phaseTotal.lead >= 10) {
+  if (meta && snap.stats.since === cfg.phaseStart && phaseTotal.lead >= 10) {
     const gap = Math.abs(phaseTotal.lead - meta.generate) / Math.max(phaseTotal.lead, meta.generate);
     if (gap > 0.2) {
       actions.push(
@@ -528,7 +536,8 @@ function compose(cfg, snap, verdict, now, { urgentOnly = false } = {}) {
 
   const meta = snap.stats?.by_source?.find((r) => r.source === "meta");
   if (meta) {
-    out.push("", `SITUS (7 hari, kanal meta): ${meta.generate} hasil, ${meta.pay_success} bayar. Lead Meta tahap ini ${phaseTotal.lead}.`);
+    const span = snap.stats.since ? `sejak ${snap.stats.since}` : `${snap.stats.days} hari`;
+    out.push("", `SITUS (${span}, kanal meta): ${meta.generate} hasil, ${meta.pay_success} bayar. Lead Meta tahap ini ${phaseTotal.lead}.`);
     // Full funnel only once the app reports it per channel (since 16 Okt 2026).
     if (meta.gate_viewed !== undefined) {
       out.push(`Corong: ${meta.gate_viewed} lihat tawaran · ${meta.pay_clicked} klik bayar · ${meta.pay_started} mulai bayar · ${meta.pay_success} lunas`);
