@@ -74,7 +74,7 @@ Catatan: sampel **pertama** setelah tracking dimulai cuma dipakai sebagai baseli
 
 Skema `rate_limits` bisa berbeda antar versi Claude Code. Kalau kartu usage tidak terisi:
 - Update Claude Code ke versi terbaru (`claude update` atau lewat npm).
-- Cek event bertipe `usage` di `server/data/events.log` — kalau nama fieldnya beda, sesuaikan `normWindow()` di `server/index.js`.
+- Cek event bertipe `usage` di `server/data/events.log` (atau arsip terbarunya, `events.log.<waktu>`) — kalau nama fieldnya beda, sesuaikan `normWindow()` di `server/index.js`.
 - Sebagai fallback, kamu tetap bisa cek manual dengan `/usage` di dalam Claude Code.
 
 ## 5. Approve & jawab dari Telegram (opsional, default mati)
@@ -204,6 +204,10 @@ claude-monitor/
 │   └── stop-server.ps1   ← matikan watchdog + server
 └── claude-settings-snippet.json
 ```
+
+## Rotasi log event
+
+Begitu `server/data/events.log` melewati `CCM_LOG_MAX_MB` (default `50`), file di-rename jadi `events.log.<waktu>` dan log baru dimulai. Arsip tidak pernah dihapus otomatis, jadi hapus manual kalau sudah tidak perlu.
 
 ## Menjalankan otomatis saat startup
 
