@@ -62,6 +62,17 @@ function num(name, fallback) {
   return Number.isFinite(value) && process.env[name] !== "" ? value : fallback;
 }
 
+function parseGates(value) {
+  const gates = new Map();
+  for (const entry of (value || "").split(",")) {
+    const [name, spend, purchases] = entry.split(":").map((part) => part.trim());
+    if (name && Number(spend) > 0 && Number(purchases) > 0) {
+      gates.set(name, { spend: Number(spend), purchases: Number(purchases) });
+    }
+  }
+  return gates;
+}
+
 function config() {
   const env = process.env;
   return {
@@ -82,6 +93,9 @@ function config() {
       .map((n) => n.trim())
       .filter(Boolean),
     intentMinSpend: num("META_INTENT_MIN_SPEND", 90000),
+    // Ad sets judged by buyers against a spend limit, e.g. "k12:350000:6" means
+    // k12 must have 6 purchases by the time the phase spend reaches Rp 350.000.
+    adsetGates: parseGates(env.META_ADSET_GATES),
     // The ad account is shared with other products (ScoutCard uses `sc-`).
     // Their ad sets are left out of every number, rule and alert here.
     excludePrefixes: (env.META_EXCLUDE_PREFIXES ?? "sc-")
@@ -335,13 +349,21 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
 
   // Decision rule: judged per ad set once it has run 2 days and spent ~Rp 50.000.
   // Purchase-intent ad sets have their own rule below and never count here.
-  const intent = (s) => cfg.intentAdsets.includes(s.name);
+  // Gated ad sets are judged only by their buyer limit, never by cost per Lead.
+  const gate = (s) => cfg.adsetGates.get(s.name);
+  const intent = (s) => cfg.intentAdsets.includes(s.name) || Boolean(gate(s));
   const evaluable = (s) => !intent(s) && day >= 2 && s.phase.spend >= cfg.minSpend;
   const intentReady = (s) => intent(s) && s.phase.spend >= cfg.intentMinSpend;
   const cpl = (m) => (m.lead > 0 ? m.spend / m.lead : Infinity);
 
   for (const s of snap.adsets) {
     if (s.status !== "ACTIVE") labels.set(s.id, s.status === "PAUSED" || s.status === "CAMPAIGN_PAUSED" ? "mati" : s.status);
+    else if (gate(s)) {
+      const g = gate(s);
+      if (s.phase.purchase >= g.purchases) labels.set(s.id, `lolos ambang, ${s.phase.purchase} lunas`);
+      else if (s.phase.spend >= g.spend) labels.set(s.id, "MATIKAN");
+      else labels.set(s.id, `${s.phase.purchase} dari ${g.purchases} lunas, batas ${rp(g.spend)}`);
+    }
     else if (intent(s) && !intentReady(s)) labels.set(s.id, `niat beli, dinilai di ${rp(cfg.intentMinSpend)}`);
     else if (intent(s)) labels.set(s.id, s.phase.purchase > 0 ? "pemenang" : s.phase.checkout > 0 ? "lanjut" : "MATIKAN");
     else if (!evaluable(s)) labels.set(s.id, "belum dinilai");
@@ -353,6 +375,13 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
 
   for (const s of active) {
     if (labels.get(s.id) !== "MATIKAN") continue;
+    if (gate(s)) {
+      const g = gate(s);
+      actions.push(
+        `MATIKAN ${s.name}: ${rp(s.phase.spend)} dengan ${s.phase.purchase} lunas, ambangnya ${g.purchases} lunas di ${rp(g.spend)}. Pause saja.`
+      );
+      continue;
+    }
     if (intent(s)) {
       actions.push(
         `MATIKAN ${s.name}: ${rp(s.phase.spend)} dengan ${s.phase.lead} Lead tapi 0 klik bayar. Kreatif niat beli ini tidak menarik pembeli. Pause saja.`
