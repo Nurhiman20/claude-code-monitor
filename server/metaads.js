@@ -512,7 +512,10 @@ function evaluate(cfg, snap, now, prevBudgets = {}) {
       notes.push(`${pct((youngSpend / allSpend) * 100, 0)} spend jatuh ke umur di bawah 25 (Advantage+ melebar). Pantau apakah Lead-nya membayar, jangan ubah ad set yang jalan.`);
     }
   }
-  if (paused.length) notes.push(`Tidak aktif: ${paused.map((s) => `${s.name} (${s.status})`).join(", ")}.`);
+  // Only ad sets that spent in this phase: older campaigns' paused ad sets stay
+  // in the account forever and would otherwise fill every report.
+  const pausedHere = paused.filter((s) => s.phase.spend > 0);
+  if (pausedHere.length) notes.push(`Tidak aktif: ${pausedHere.map((s) => `${s.name} (${s.status})`).join(", ")}.`);
 
   return { day, length, actions, urgent, notes, labels, phaseTotal, salesMeta };
 }
@@ -553,10 +556,20 @@ function compose(cfg, snap, verdict, now, { urgentOnly = false } = {}) {
   }
 
   const used = cfg.phaseBudget ? ` dari ${rp(cfg.phaseBudget)} (${pct((phaseTotal.spend / cfg.phaseBudget) * 100, 0)})` : "";
+  // The cost-per-Lead threshold only applies when some active ad set is judged
+  // by it; a phase of gated ad sets is judged by buyers, so say that instead.
+  const activeSets = snap.adsets.filter((s) => s.status === "ACTIVE");
+  const byCpl = activeSets.some((s) => !cfg.adsetGates.has(s.name) && !cfg.intentAdsets.includes(s.name));
+  const purchases = sum(snap.adsets, (s) => s.phase.purchase);
+  const rule = byCpl
+    ? `Ambang: > ${rp(cfg.killCpl)} matikan, < ${rp(cfg.winCpl)} pemenang.`
+    : `${purchases} lunas${purchases ? `, ${rp(phaseTotal.spend / purchases)}/pembeli` : ""}. Ambang: ${[
+        ...new Set(activeSets.map((s) => cfg.adsetGates.get(s.name)).filter(Boolean).map((g) => `kurang dari ${g.purchases} lunas di ${rp(g.spend)} matikan`)),
+      ].join("; ")}.`;
   out.push(
     "",
     `${cfg.phaseName.toUpperCase()} s.d. hari ini: ${rp(phaseTotal.spend)}${used}`,
-    `${phaseTotal.lead} Lead, ${phaseTotal.lead ? `${rp(phaseTotal.spend / phaseTotal.lead)}/Lead` : "belum ada Lead"}. Ambang: > ${rp(cfg.killCpl)} matikan, < ${rp(cfg.winCpl)} pemenang.`
+    `${phaseTotal.lead} Lead, ${phaseTotal.lead ? `${rp(phaseTotal.spend / phaseTotal.lead)}/Lead` : "belum ada Lead"}. ${rule}`
   );
   // On day 1 the phase so far *is* today; listing it twice is noise.
   if (day > 1) {
