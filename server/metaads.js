@@ -110,6 +110,8 @@ function config() {
     statsUrl: env.HAPPI_STATS_URL || "https://www.happicareerplan.com/api/stats",
     salesUrl: env.HAPPI_SALES_URL || "https://www.happicareerplan.com/api/admin/sales",
     statsToken: env.HAPPI_STATS_TOKEN || "",
+    // Prepaid account: alert once when the available balance drops to this.
+    lowBalance: num("META_LOW_BALANCE", 50000),
   };
 }
 
@@ -117,7 +119,7 @@ function config() {
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-let state = { lastSlot: null, lastUrgentAt: 0, failures: 0, alerted: {}, budgets: {} };
+let state = { lastSlot: null, lastUrgentAt: 0, failures: 0, alerted: {}, budgets: {}, lowBalance: false };
 
 function load() {
   try {
@@ -265,7 +267,7 @@ async function snapshot(cfg, now, { withAges = false } = {}) {
     : {};
 
   const [account, allAdsets, allAds, allToday, allPhase, ages, stats, sales] = await Promise.all([
-    graph(cfg, act, { fields: "name,account_status,disable_reason,currency,timezone_name" }),
+    graph(cfg, act, { fields: "name,account_status,disable_reason,currency,timezone_name,is_prepay_account,balance,funding_source_details" }),
     graph(cfg, `${act}/adsets`, { fields: "id,name,effective_status,daily_budget", limit: "50" }),
     graph(cfg, `${act}/ads`, {
       fields: "name,effective_status,adset{name},ad_review_feedback",
@@ -315,6 +317,17 @@ async function snapshot(cfg, now, { withAges = false } = {}) {
     stats: stats && !stats.error ? stats : null,
     sales: sales && !sales.error ? sales : null,
   };
+}
+
+// Prepaid balance as Ads Manager shows it ("Available balance (IDR155,307)").
+// IDR has no minor unit in Graph, so numbers are whole rupiah.
+function availableBalance(account) {
+  if (!account?.is_prepay_account) return null;
+  const shown = account.funding_source_details?.display_string || "";
+  const match = shown.match(/([\d.,]+)\)?\s*$/);
+  if (match) return Number(match[1].replace(/[.,]/g, ""));
+  const raw = Number(account.balance);
+  return Number.isFinite(raw) ? raw : null;
 }
 
 // --- Rules -----------------------------------------------------------------
@@ -537,6 +550,8 @@ function compose(cfg, snap, verdict, now, { urgentOnly = false } = {}) {
   out.push(`📊 Meta Ads · ${cfg.phaseName} ${dayLabel} · ${wibClock(now)} WIB`);
 
   const todo = [...urgent.map((u) => u.text), ...actions];
+  const saldo = availableBalance(snap.account);
+  if (saldo !== null && !urgentOnly) out.push(`Saldo iklan: ${rp(saldo)}`);
   if (todo.length) {
     out.push("", "⚠️ PERLU TINDAKAN");
     todo.forEach((t, i) => out.push(`${i + 1}. ${t}`));
@@ -649,6 +664,26 @@ async function failed(cfg, error, now) {
   save();
 }
 
+// Once per drop: alert when the prepaid balance reaches the limit, then stay
+// quiet until a top up lifts it above the limit again.
+async function checkBalance(cfg, snap) {
+  const saldo = availableBalance(snap.account);
+  if (saldo === null || !cfg.lowBalance) return;
+  if (saldo > cfg.lowBalance) {
+    if (state.lowBalance) {
+      state.lowBalance = false;
+      save();
+    }
+    return;
+  }
+  if (state.lowBalance) return;
+  state.lowBalance = true;
+  save();
+  const text = `💳 Saldo Meta Ads tinggal ${rp(saldo)}, sudah di bawah ${rp(cfg.lowBalance)}. Top up sebelum iklan berhenti tayang.`;
+  await telegramSend(text);
+  desktopNotify("Meta Ads: saldo menipis", text);
+}
+
 /**
  * Full report. `dryRun` returns the text without sending or touching state;
  * `fixture` ({ now, snap }) skips the network, for testing the rules.
@@ -666,6 +701,7 @@ async function report({ manual = false, dryRun = false, fixture = null } = {}) {
     if (manual) await telegramSend(`Gagal ambil data Meta: ${e.message}`);
     return null;
   }
+  if (!dryRun) await checkBalance(cfg, snap);
 
   // Scheduled reports pause while no ad set runs: six reports a day of zeros
   // are noise. One notice when it goes quiet; resumes on its own once an ad
@@ -711,6 +747,7 @@ async function urgentCheck(now) {
     return;
   }
   state.failures = 0;
+  await checkBalance(cfg, snap);
   const verdict = evaluate(cfg, snap, now, state.budgets);
   const fresh = freshUrgent(verdict.urgent, now);
   rememberBudgets(snap);
@@ -750,4 +787,4 @@ function start() {
   setInterval(tick, TICK_MS).unref?.();
 }
 
-module.exports = { start, report, evaluate, compose, latestSlot, phaseDay };
+module.exports = { start, report, evaluate, compose, latestSlot, phaseDay, availableBalance };

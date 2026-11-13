@@ -154,6 +154,9 @@ plus **PERLU TINDAKAN** menurut aturan keputusan di `happi-careerplan/marketing/
 Masalah mendesak (akun bermasalah, iklan ditolak, ad set tidak tayang, budget diubah, gagal
 baca Meta) dicek tiap jam, 24 jam, dan dikirim sekali per hari per masalah.
 
+- Saldo prepaid: dicek tiap jam. Begitu saldo tersedia turun ke `META_LOW_BALANCE` (bawaan
+  Rp 50.000) atau kurang, Telegram 💳 dikirim sekali, lalu diam sampai saldo di atas batas lagi
+  (sesudah top up). Saldo juga tampil di tiap report.
 - Token: `META_ACCESS_TOKEN` dan `META_ACCOUNT_ID` di env User Windows. Kalau proses server
   tidak mewarisinya, dibaca langsung dari registry (`HKCU\Environment`).
 - Pindah tahap: ubah `META_PHASE_*` di `server/.env`, restart server.
