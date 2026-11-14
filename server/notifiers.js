@@ -13,9 +13,20 @@ function desktopNotify(title, message) {
   }
 }
 
-async function telegramCall(method, body) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+// Two bots: "work" (Claude Code tasks, approvals, usage) and "finance"
+// (Meta Ads spend, prepaid balance). Finance falls back to the work bot when
+// TELEGRAM_FINANCE_BOT_TOKEN / TELEGRAM_FINANCE_CHAT_ID are not set.
+function telegramTarget(channel) {
+  if (channel === "finance") {
+    const token = process.env.TELEGRAM_FINANCE_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_FINANCE_CHAT_ID;
+    if (token && chatId) return { token, chatId };
+  }
+  return { token: process.env.TELEGRAM_BOT_TOKEN, chatId: process.env.TELEGRAM_CHAT_ID };
+}
+
+async function telegramCall(method, body, channel = "work") {
+  const { token, chatId } = telegramTarget(channel);
   if (!token || !chatId) return null; // Telegram not configured, skip silently.
 
   try {
@@ -47,6 +58,12 @@ async function telegramSend(text, replyMarkup) {
   return msg ? msg.message_id : null;
 }
 
+// Plain-text message to the finance bot (Meta Ads reports and balance alerts).
+async function financeSend(text) {
+  const msg = await telegramCall("sendMessage", { text }, "finance");
+  return msg ? msg.message_id : null;
+}
+
 async function telegramEdit(messageId, text) {
   if (!messageId) return;
   await telegramCall("editMessageText", { message_id: messageId, text });
@@ -57,4 +74,4 @@ function notifyBoth(title, message) {
   telegramNotify(`*${title}*\n${message}`);
 }
 
-module.exports = { desktopNotify, telegramNotify, telegramSend, telegramEdit, notifyBoth };
+module.exports = { desktopNotify, telegramNotify, telegramSend, telegramEdit, financeSend, notifyBoth };

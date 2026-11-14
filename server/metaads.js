@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const { telegramSend, desktopNotify } = require("./notifiers");
+const { financeSend, desktopNotify } = require("./notifiers");
 
 // Meta Ads watcher.
 //
@@ -659,7 +659,7 @@ async function failed(cfg, error, now) {
   console.error("[metaads]", error.message);
   if (state.failures >= 2) {
     const [fresh] = freshUrgent([{ key: "fetch-failed", text: error.message }], now);
-    if (fresh) await telegramSend(`⚠️ Pemantau Meta Ads tidak bisa membaca data (${state.failures}x berturut-turut): ${error.message}`);
+    if (fresh) await financeSend(`⚠️ Pemantau Meta Ads tidak bisa membaca data (${state.failures}x berturut-turut): ${error.message}`);
   }
   save();
 }
@@ -680,7 +680,7 @@ async function checkBalance(cfg, snap) {
   state.lowBalance = true;
   save();
   const text = `💳 Saldo Meta Ads tinggal ${rp(saldo)}, sudah di bawah ${rp(cfg.lowBalance)}. Top up sebelum iklan berhenti tayang.`;
-  await telegramSend(text);
+  await financeSend(text);
   desktopNotify("Meta Ads: saldo menipis", text);
 }
 
@@ -698,7 +698,7 @@ async function report({ manual = false, dryRun = false, fixture = null } = {}) {
   } catch (e) {
     if (dryRun) throw e;
     await failed(cfg, e, now);
-    if (manual) await telegramSend(`Gagal ambil data Meta: ${e.message}`);
+    if (manual) await financeSend(`Gagal ambil data Meta: ${e.message}`);
     return null;
   }
   if (!dryRun) await checkBalance(cfg, snap);
@@ -713,7 +713,7 @@ async function report({ manual = false, dryRun = false, fixture = null } = {}) {
       if (!state.idle) {
         state.idle = true;
         save();
-        await telegramSend("⏸ Tidak ada ad set Happi yang aktif. Report terjadwal Meta Ads berhenti sampai ada yang aktif lagi. /ads tetap bisa dipakai.");
+        await financeSend("⏸ Tidak ada ad set Happi yang aktif. Report terjadwal Meta Ads berhenti sampai ada yang aktif lagi. /ads tetap bisa dipakai.");
       }
       return null;
     }
@@ -730,7 +730,7 @@ async function report({ manual = false, dryRun = false, fixture = null } = {}) {
   rememberBudgets(snap);
   save();
 
-  await telegramSend(text);
+  await financeSend(text);
   if (verdict.actions.length || verdict.urgent.length) {
     desktopNotify("Meta Ads: perlu tindakan", [...verdict.urgent.map((u) => u.text), ...verdict.actions][0]);
   }
@@ -753,7 +753,7 @@ async function urgentCheck(now) {
   rememberBudgets(snap);
   save();
   if (!fresh.length) return;
-  await telegramSend(compose(cfg, snap, { ...verdict, urgent: fresh, actions: [] }, now, { urgentOnly: true }));
+  await financeSend(compose(cfg, snap, { ...verdict, urgent: fresh, actions: [] }, now, { urgentOnly: true }));
   desktopNotify("Meta Ads: mendesak", fresh[0].text);
 }
 
