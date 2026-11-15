@@ -154,9 +154,9 @@ plus **PERLU TINDAKAN** menurut aturan keputusan di `happi-careerplan/marketing/
 Masalah mendesak (akun bermasalah, iklan ditolak, ad set tidak tayang, budget diubah, gagal
 baca Meta) dicek tiap jam, 24 jam, dan dikirim sekali per hari per masalah.
 
-- Semua pesan Meta Ads (report, `/ads`, mendesak, saldo) dikirim ke bot keuangan
-  `TELEGRAM_FINANCE_BOT_TOKEN` + `TELEGRAM_FINANCE_CHAT_ID` kalau diisi, terpisah dari notif
-  pekerjaan. Perintah `/ads` tetap diketik di bot pekerjaan; balasannya muncul di bot keuangan.
+- Peringatan saldo prepaid 💳 dikirim ke bot keuangan `TELEGRAM_FINANCE_BOT_TOKEN` +
+  `TELEGRAM_FINANCE_CHAT_ID` kalau diisi. Report, `/ads`, dan peringatan mendesak tetap di bot
+  pekerjaan.
 - Saldo prepaid: dicek tiap jam. Begitu saldo tersedia turun ke `META_LOW_BALANCE` (bawaan
   Rp 50.000) atau kurang, Telegram 💳 dikirim sekali, lalu diam sampai saldo di atas batas lagi
   (sesudah top up). Saldo juga tampil di tiap report.
