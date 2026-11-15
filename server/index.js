@@ -70,10 +70,7 @@ app.post("/api/event", (req, res) => {
       notifyBoth(`Task selesai — ${project}`, summary.forStop(payload, store.getRecent(500), sessionId));
       break;
     case "SubagentStop":
-      notifyBoth(
-        `Subagent selesai — ${project}`,
-        summary.forStop(payload, store.getRecent(500), sessionId, "SubagentStop")
-      );
+      // Dashboard only: the parent's Stop already reports the finished task.
       break;
     case "PreToolUse":
       if ((payload.tool_name || payload.toolName) === "AskUserQuestion" && !approvals.permissionEnabled()) {

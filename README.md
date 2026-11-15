@@ -53,7 +53,7 @@ Event yang disambungkan:
 | `Notification` permission | Claude minta izin tool / persetujuan plan | Notif desktop + Telegram 🔐 (tool + perintah) / 📋 (isi plan) |
 | `PreToolUse` AskUserQuestion | Claude butuh keputusan        | Notif desktop + Telegram (pertanyaan + pilihan) |
 | `Stop`            | Claude selesai merespons/menyelesaikan task | Notif desktop + Telegram **berisi ringkasan** (lihat bagian 6) |
-| `SubagentStop`    | Subagent (Task tool) selesai                | Notif desktop + Telegram + ringkasan      |
+| `SubagentStop`    | Subagent (Task tool) selesai                | Dashboard saja (tanpa notif)              |
 | `PreToolUse`/`PostToolUse` | Setiap kali tool dipanggil/selesai   | Masuk ke live feed saja (tanpa notif, biar nggak spam) |
 | `PreToolUse` (`ask.js permission`) | Sebelum tool berisiko dijalankan | Minta izin lewat Telegram/dashboard (kalau diaktifkan) |
 | `Stop` (`ask.js question`)  | Claude berhenti sambil bertanya   | Pertanyaannya dikirim ke Telegram, balasanmu dikirim balik ke agent |
