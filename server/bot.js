@@ -94,22 +94,25 @@ async function handleMessage(msg) {
   } else if (text.startsWith("/start") || text.startsWith("/help")) {
     await reply(HELP);
   } else if (raw && !raw.startsWith("/")) {
-    // A bare message is an answer to whatever question is on the table.
-    const q = approvals.latest("question");
-    if (q) {
-      approvals.resolve(q.id, { decision: "answer", answer: raw, by: "Telegram" });
-      await reply("Terkirim ke Claude 👍", null);
-    }
+    // A bare message answers whatever is on the table: a question, a choice,
+    // or a deny-with-reason for a tool or plan.
+    const note = await approvals.replyText(raw);
+    if (note) await reply(note, null);
   }
 }
 
 async function handleCallback(cb) {
   if (String(cb.message?.chat?.id) !== String(chatId)) return;
-  const [action, id] = String(cb.data || "").split(":");
+  const [action, id, qi, oi] = String(cb.data || "").split(":");
   const decision = action === "ok" ? "allow" : action === "no" ? "deny" : null;
 
   let note = "Permintaan ini sudah kedaluwarsa.";
-  if (decision && approvals.resolve(id, { decision, by: "Telegram" })) {
+  if (action === "c") {
+    const q = approvals.get(id)?.questions?.[+qi];
+    const label = q?.options?.[+oi];
+    const r = label ? await approvals.choose(id, +qi, label) : null;
+    if (r) note = r.done ? `Dipilih: ${label} ✅` : `Dicatat: ${label}`;
+  } else if (decision && approvals.resolve(id, { decision, by: "Telegram" })) {
     note = decision === "allow" ? "Diizinkan ✅" : "Ditolak ❌";
   }
 

@@ -3,6 +3,9 @@
 //
 //   node ask.js permission   → PreToolUse: allow or deny a tool call
 //   node ask.js question     → Stop: relay Claude's question and feed back your reply
+//   node ask.js request      → PermissionRequest: tool permission, plan approval,
+//                              or AskUserQuestion answers (only when Claude Code
+//                              is about to prompt)
 //
 // The POST to /api/ask deliberately hangs until someone answers, so give the
 // hook a generous `timeout` in settings.json. Anything unexpected (server down,
@@ -13,9 +16,10 @@ const http = require("http");
 const { lastAssistantText } = require("../server/transcript");
 
 const PORT = process.env.CCM_PORT || 4756;
-const mode = process.argv[2] === "question" ? "question" : "permission";
+const mode = ["question", "request"].includes(process.argv[2]) ? process.argv[2] : "permission";
 const TIMEOUT_MS =
-  parseInt(process.env.CCM_ASK_TIMEOUT_MS, 10) || (mode === "question" ? 540000 : 240000);
+  parseInt(process.env.CCM_ASK_TIMEOUT_MS, 10) ||
+  (mode === "question" ? 540000 : mode === "request" ? 300000 : 240000);
 // Only relay a Stop when Claude actually asked something, unless told otherwise.
 const STOP_MODE = (process.env.CCM_ASK_ON_STOP || "question").toLowerCase();
 
@@ -47,6 +51,30 @@ function emitPermission(result) {
       },
     })
   );
+  process.exit(0);
+}
+
+// PermissionRequest output. AskUserQuestion and ExitPlanMode only run with
+// `updatedInput`: the original input, plus `answers` for AskUserQuestion.
+function emitRequest(payload, result) {
+  const input = payload.tool_input || payload.toolInput || {};
+  const by = (result && result.by) || "remote approval";
+  let decision;
+  if (result && result.decision === "answer" && result.answers) {
+    decision = { behavior: "allow", updatedInput: { ...input, answers: result.answers } };
+  } else if (result && result.decision === "allow" && (payload.tool_name || payload.toolName) !== "AskUserQuestion") {
+    decision = { behavior: "allow", updatedInput: input };
+  } else if (result && result.decision === "deny") {
+    decision = {
+      behavior: "deny",
+      message: result.message
+        ? `Ditolak lewat ${by}. Pesan dari pengguna: ${result.message}`
+        : `Ditolak lewat ${by}. Jangan jalankan ini; tanya dulu kalau perlu.`,
+    };
+  } else {
+    bail(); // timeout, skip, abandoned: fall back to the normal prompt
+  }
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision } }));
   process.exit(0);
 }
 
@@ -101,6 +129,8 @@ process.stdin.on("end", () => {
     if (!text) bail();
     if (STOP_MODE !== "always" && !looksLikeQuestion(text)) bail();
     send({ ...payload, question: text }, emitAnswer);
+  } else if (mode === "request") {
+    send(payload, (result) => emitRequest(payload, result));
   } else {
     send(payload, emitPermission);
   }

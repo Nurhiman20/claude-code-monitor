@@ -64,9 +64,14 @@ async function financeSend(text) {
   return msg ? msg.message_id : null;
 }
 
-async function telegramEdit(messageId, text) {
+// Without replyMarkup the inline keyboard is removed.
+async function telegramEdit(messageId, text, replyMarkup) {
   if (!messageId) return;
-  await telegramCall("editMessageText", { message_id: messageId, text });
+  await telegramCall("editMessageText", {
+    message_id: messageId,
+    text,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
 }
 
 function notifyBoth(title, message) {

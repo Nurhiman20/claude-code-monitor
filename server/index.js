@@ -62,7 +62,9 @@ app.post("/api/event", (req, res) => {
     case "Notification":
       // Idle ("waiting for your input") only says Claude is waiting; it stays on
       // the dashboard. Permission and plan-approval prompts need a decision.
-      if (isPermissionPrompt(payload)) notifyPermission(sessionId, project, payload);
+      // With remote approval on, the PermissionRequest hook already sent an
+      // answerable message; this would only duplicate it.
+      if (isPermissionPrompt(payload) && !approvals.permissionEnabled()) notifyPermission(sessionId, project, payload);
       break;
     case "Stop":
       notifyBoth(`Task selesai — ${project}`, summary.forStop(payload, store.getRecent(500), sessionId));
@@ -74,7 +76,7 @@ app.post("/api/event", (req, res) => {
       );
       break;
     case "PreToolUse":
-      if ((payload.tool_name || payload.toolName) === "AskUserQuestion") {
+      if ((payload.tool_name || payload.toolName) === "AskUserQuestion" && !approvals.permissionEnabled()) {
         const text = describeQuestions(payload.tool_input || payload.toolInput);
         desktopNotify(`Claude butuh keputusan — ${project}`, text.split("\n")[0]);
         telegramSend(`❓ Claude butuh keputusan — ${project}\n\n${text}`);

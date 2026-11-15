@@ -34,7 +34,10 @@ function view(r) {
   return {
     id: r.id,
     mode: r.mode,
+    kind: r.kind,
     tool: r.tool,
+    questions: r.questions,
+    answers: r.answers,
     project: r.project,
     sessionId: r.sessionId,
     summary: r.summary,
@@ -45,7 +48,9 @@ function view(r) {
   };
 }
 
-function create({ mode, tool, project, sessionId, summary, detail, timeoutMs }) {
+// kind (mode "permission" only): "tool" | "plan" | "choice". A choice carries
+// AskUserQuestion's questions; answers fill in one tap at a time.
+function create({ mode, kind, tool, questions, project, sessionId, summary, detail, timeoutMs }) {
   const id = crypto.randomBytes(4).toString("hex"); // short: callback_data is capped at 64 bytes
   const now = Date.now();
   const ttl = Math.min(Math.max(Number(timeoutMs) || 240000, MIN_TTL), MAX_TTL);
@@ -53,7 +58,10 @@ function create({ mode, tool, project, sessionId, summary, detail, timeoutMs }) 
   const record = {
     id,
     mode: mode === "question" ? "question" : "permission",
+    kind: kind || (mode === "question" ? "question" : "tool"),
     tool: tool || null,
+    questions: questions || null,
+    answers: questions ? {} : null,
     project: project || "unknown",
     sessionId: sessionId || null,
     summary: summary || "",
@@ -84,6 +92,15 @@ function resolve(id, resolution) {
   return true;
 }
 
+// Records one AskUserQuestion answer. Returns the view, or null if gone.
+function answer(id, question, value) {
+  const r = pending.get(id);
+  if (!r || !r.answers) return null;
+  r.answers[question] = value;
+  emit("ask", r);
+  return view(r);
+}
+
 function get(id) {
   const r = pending.get(id);
   return r ? view(r) : null;
@@ -104,4 +121,4 @@ function latest(mode) {
   return found ? view(found) : null;
 }
 
-module.exports = { create, resolve, get, list, latest, subscribe };
+module.exports = { create, resolve, answer, get, list, latest, subscribe };

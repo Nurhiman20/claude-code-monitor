@@ -39,6 +39,14 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node /ABSOLUTE/PATH/TO/claude-monitor/hooks/ask.js request", "timeout": 330 }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "*",

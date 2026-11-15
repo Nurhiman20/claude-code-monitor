@@ -57,6 +57,7 @@ Event yang disambungkan:
 | `PreToolUse`/`PostToolUse` | Setiap kali tool dipanggil/selesai   | Masuk ke live feed saja (tanpa notif, biar nggak spam) |
 | `PreToolUse` (`ask.js permission`) | Sebelum tool berisiko dijalankan | Minta izin lewat Telegram/dashboard (kalau diaktifkan) |
 | `Stop` (`ask.js question`)  | Claude berhenti sambil bertanya   | Pertanyaannya dikirim ke Telegram, balasanmu dikirim balik ke agent |
+| `PermissionRequest` (`ask.js request`) | Claude akan menampilkan dialog izin, plan, atau AskUserQuestion | Telegram: tombol Izinkan/Tolak, Setujui plan, atau satu tombol per pilihan. Balas chat = nomor pilihan / jawaban bebas / alasan tolak. Diam 5 menit = dialog terminal |
 | `statusLine`      | Dipanggil berkala oleh Claude Code          | Update budget harian + window 5 jam/mingguan, alert budget di 50/80/100/120% dan window di 50/75/90% |
 
 ## 4. Budget harian
