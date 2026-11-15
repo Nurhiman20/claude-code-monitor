@@ -5,7 +5,7 @@ const path = require("path");
 const { WebSocketServer } = require("ws");
 const store = require("./store");
 const daily = require("./daily");
-const { notifyBoth, desktopNotify, telegramNotify } = require("./notifiers");
+const { notifyBoth, desktopNotify, telegramNotify, telegramSend } = require("./notifiers");
 const approvals = require("./approvals");
 const summary = require("./summary");
 const bot = require("./bot");
@@ -60,10 +60,9 @@ app.post("/api/event", (req, res) => {
 
   switch (evt.type) {
     case "Notification":
-      notifyBoth(
-        `Claude butuh input — ${project}`,
-        payload.message || "Claude Code sedang menunggu kamu."
-      );
+      // Idle ("waiting for your input") and permission prompts only say Claude
+      // is waiting; they stay on the dashboard. Real decisions are announced
+      // from AskUserQuestion below.
       break;
     case "Stop":
       notifyBoth(`Task selesai — ${project}`, summary.forStop(payload, store.getRecent(500), sessionId));
@@ -75,6 +74,12 @@ app.post("/api/event", (req, res) => {
       );
       break;
     case "PreToolUse":
+      if ((payload.tool_name || payload.toolName) === "AskUserQuestion") {
+        const text = describeQuestions(payload.tool_input || payload.toolInput);
+        desktopNotify(`Claude butuh keputusan — ${project}`, text.split("\n")[0]);
+        telegramSend(`❓ Claude butuh keputusan — ${project}\n\n${text}`);
+      }
+      break;
     case "PostToolUse":
       // No notification for every tool call — that would be way too noisy.
       // These only feed the live progress log on the dashboard.
@@ -87,6 +92,20 @@ app.post("/api/event", (req, res) => {
 
   res.json({ ok: true });
 });
+
+// AskUserQuestion input: { questions: [{ question, options: [{ label }] }] }.
+// Plain text: questions carry `_` `*` and backticks that break Markdown.
+function describeQuestions(input) {
+  const questions = Array.isArray(input?.questions) ? input.questions : [];
+  if (!questions.length) return "Claude Code menunggu pilihan kamu.";
+  return questions
+    .map((q) => {
+      const options = (q.options || []).map((o, i) => `${i + 1}. ${o.label}`);
+      return [q.question || q.header || "Pertanyaan", ...options].join("\n");
+    })
+    .join("\n\n")
+    .slice(0, 3500);
+}
 
 // `rate_limits` entries look like { used_percentage: 11, resets_at: 1786795200 }
 // where resets_at is a unix timestamp in *seconds*. Older/newer Claude Code

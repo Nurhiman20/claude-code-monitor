@@ -2,7 +2,7 @@
 
 Server lokal + dashboard real-time buat memantau sesi Claude Code kamu:
 - **Budget harian** — jatah pemakaian limit mingguan per hari (default 14%), lengkap dengan sisa, pace ideal, dan riwayat 14 hari.
-- Notifikasi desktop **dan** Telegram saat Claude butuh input, task selesai, atau limit usage mendekati batas.
+- Notifikasi desktop **dan** Telegram saat Claude butuh keputusan (AskUserQuestion), task selesai, atau limit usage mendekati batas.
 - **Approve tool & jawab pertanyaan Claude dari Telegram** (opsional — lihat bagian 5).
 - Live feed progress (tool apa yang sedang/sudah dijalankan Claude).
 - Kartu window 5 jam & mingguan dengan progress bar dan hitung mundur reset.
@@ -49,7 +49,8 @@ Event yang disambungkan:
 
 | Hook event      | Kapan terpicu                              | Efek di app ini                          |
 |------------------|---------------------------------------------|-------------------------------------------|
-| `Notification`   | Claude butuh input/izin dari kamu           | Notif desktop + Telegram                  |
+| `Notification`   | Claude menunggu input/izin                  | Dashboard saja (tanpa notif)              |
+| `PreToolUse` AskUserQuestion | Claude butuh keputusan        | Notif desktop + Telegram (pertanyaan + pilihan) |
 | `Stop`            | Claude selesai merespons/menyelesaikan task | Notif desktop + Telegram **berisi ringkasan** (lihat bagian 6) |
 | `SubagentStop`    | Subagent (Task tool) selesai                | Notif desktop + Telegram + ringkasan      |
 | `PreToolUse`/`PostToolUse` | Setiap kali tool dipanggil/selesai   | Masuk ke live feed saja (tanpa notif, biar nggak spam) |
