@@ -242,8 +242,10 @@ async function ask({ mode, payload = {}, timeoutMs, onCreated }) {
   const sent = telegramSend(askText(request), isQuestion ? null : keyboard(request));
   messages.set(id, sent);
 
+  console.log(`[ask] ${new Date().toISOString()} ${kind} ${tool || ""} menunggu (${id})`);
   const result = await promise;
   messages.delete(id);
+  console.log(`[ask] ${new Date().toISOString()} ${kind} ${id} → ${result.decision}${result.by ? ` lewat ${result.by}` : ""}`);
 
   const mid = await sent;
   const tail = result.by ? ` (lewat ${result.by})` : "";
