@@ -60,9 +60,9 @@ app.post("/api/event", (req, res) => {
 
   switch (evt.type) {
     case "Notification":
-      // Idle ("waiting for your input") and permission prompts only say Claude
-      // is waiting; they stay on the dashboard. Real decisions are announced
-      // from AskUserQuestion below.
+      // Idle ("waiting for your input") only says Claude is waiting; it stays on
+      // the dashboard. Permission and plan-approval prompts need a decision.
+      if (isPermissionPrompt(payload)) notifyPermission(sessionId, project, payload);
       break;
     case "Stop":
       notifyBoth(`Task selesai — ${project}`, summary.forStop(payload, store.getRecent(500), sessionId));
@@ -93,7 +93,35 @@ app.post("/api/event", (req, res) => {
   res.json({ ok: true });
 });
 
-// AskUserQuestion input: { questions: [{ question, options: [{ label }] }] }.
+function isPermissionPrompt(payload) {
+  const type = payload.notification_type || payload.notificationType;
+  if (type) return type === "permission_prompt";
+  return /permission|approval/i.test(payload.message || ""); // older versions: no type
+}
+
+// The prompt itself only says "Claude needs your permission"; the tool it is
+// about is the latest PreToolUse of the same session.
+function notifyPermission(sessionId, project, payload) {
+  const last = store
+    .getRecent(500)
+    .reverse()
+    .find((e) => e.sessionId === sessionId && e.type === "PreToolUse");
+  const tool = last?.payload.tool_name || last?.payload.toolName;
+  const input = last?.payload.tool_input || last?.payload.toolInput;
+
+  if (tool === "ExitPlanMode" || /plan/i.test(payload.message || "")) {
+    const plan = String(input?.plan || "").trim();
+    desktopNotify(`Claude minta persetujuan plan — ${project}`, plan.split("\n")[0] || "Plan menunggu persetujuan.");
+    telegramSend(`📋 Claude minta persetujuan plan — ${project}${plan ? `\n\n${plan.slice(0, 3500)}` : ""}`);
+    return;
+  }
+
+  const detail = tool ? `${tool}: ${approvals.describeTool(tool, input)}`.slice(0, 3500) : payload.message || "";
+  desktopNotify(`Claude minta izin — ${project}`, detail.split("\n")[0]);
+  telegramSend(`🔐 Claude minta izin — ${project}\n\n${detail}`);
+}
+
+// AskUserQuestion input:{ questions: [{ question, options: [{ label }] }] }.
 // Plain text: questions carry `_` `*` and backticks that break Markdown.
 function describeQuestions(input) {
   const questions = Array.isArray(input?.questions) ? input.questions : [];

@@ -192,6 +192,7 @@ module.exports = {
   permissionEnabled,
   questionsEnabled,
   allowedTools,
+  describeTool,
   list: pending.list,
   latest: pending.latest,
   subscribe: pending.subscribe,
